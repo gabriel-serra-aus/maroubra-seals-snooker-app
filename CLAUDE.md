@@ -27,11 +27,11 @@ Vocabulary used throughout code and UI (keep it consistent with the rules doc): 
 | -------- | ------ | ----- |
 | Framework | Next.js (App Router, TypeScript) | Public pages + admin API in one project |
 | Hosting   | Netlify free tier | Auto-deploy from GitHub `main`. Not Vercel: Hobby is licensed for personal, non-commercial use (O-10) |
-| Database  | Supabase (Postgres) | Chosen over Turso for the row-editing web UI — useful for on-the-night manual fixes (O-11) |
+| Database  | Supabase (Postgres) via `DATABASE_URL` and postgres.js | Chosen over Turso for the row-editing web UI — useful for on-the-night manual fixes (O-11). Direct Postgres, not the Supabase JS client, because writes need transactions and row locks (spec 7). With `DATABASE_URL` unset the app and tests run on PGlite, an embedded Postgres under `.data/` — no local service needed |
 | Auth      | `ADMIN_CODES` env var (`Name:code` pairs) + session cookie | One code per organiser; the code identifies who, so "changed by" is never typed (O-8). No accounts, no resets, no email |
 | Ratings   | Integer, `-100..200`, **lower is better** | Golf-style handicap; negatives are normal for strong players (§6, spec 5.6) |
 
-Local tooling present: Node 25, npm 11, git. Netlify CLI and `gh` are **not** installed — install them before attempting a CLI deploy, or use the Netlify/GitHub web UI.
+Local tooling present: Node 25, npm 11, git. Netlify CLI and `gh` are **not** installed — install them before attempting a CLI deploy, or use the Netlify/GitHub web UI. `npm run dev` needs no database service (PGlite); `npm test` runs the logic unit tests and the route-level integration tests on in-memory PGlite. If `0001_init.sql` changes before the first production deploy, delete `.data/pglite` and re-run `npm run db:migrate && npm run db:seed`.
 
 ## Architecture rules
 
@@ -64,7 +64,7 @@ UI can be checked by hand; the logic cannot.
 ## Deployment
 
 1. Push to GitHub; connect the repo to Netlify.
-2. Set env vars in Netlify: `ADMIN_CODES`, `CRON_SECRET`, plus the Supabase URL and keys. The Supabase service key is **server-only** — never expose it to the browser or prefix it with `NEXT_PUBLIC_`.
+2. Set env vars in Netlify: `ADMIN_CODES`, `CRON_SECRET` and `DATABASE_URL` (the Supabase transaction-pooler connection string). `DATABASE_URL` carries the database password and is **server-only** — never expose it to the browser or prefix it with `NEXT_PUBLIC_`. Apply the schema once with `npm run db:migrate` against that URL (or paste `supabase/migrations/0001_init.sql` into the Supabase SQL editor).
 3. `main` deploys to production; branches get deploy previews. Rotate one organiser's code by updating `ADMIN_CODES` and redeploying — it logs out only that person.
 4. A daily Netlify scheduled function pings the database so the free Supabase project doesn't pause.
 5. Never commit `.env*` files or real credentials.

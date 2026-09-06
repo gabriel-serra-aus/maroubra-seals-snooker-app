@@ -711,6 +711,8 @@ Procedure for round `r ≥ 2` with pool size `P`:
 
 Rounds two onwards have no slots, so the multiple-free-pass rule of 5.3 does not apply there: **at most one free pass per round from round two on**. Pairings are random, not by fixed bracket position, which is the only workable reading once buy-back winners join round two and free passes change the count (O-4).
 
+**A player left waiting after the round's matches are finished.** This cannot happen in normal play; a correction (5.7) or the master override (5.10) can cause it. In round one, once buy-backs are closed, anyone still without an opponent when the last match finishes goes through on a free pass, exactly as at the close (§11, O-4). From round two onwards the draw waits: the admin bracket names the waiting player and the organiser pairs them or grants a free pass on 3.9. The draw runs as soon as nobody is left waiting.
+
 Round numbering for match labels: round-one matches are `M1..M{B/2}` by slot pair; later rounds continue from `B/2 + 1` in creation order.
 
 ### 5.5 Force Pair (§10)
@@ -820,10 +822,10 @@ The override actions in 3.9 are the same pure functions the normal routes use, c
 | Override | Reuses | Extra behaviour |
 | --- | --- | --- |
 | Reset a match | 5.8 (cancel start) and 5.7 step 1 (pull the winner back) | Works from `finished` as well as `in_play`. Unwinds forward one round only; if the next round's match has already started, it unwinds that too, and says so in the confirmation. |
-| Delete a match | — | Both entries return to waiting in that round; round-one slots are released to the free-slot order. |
+| Delete a match | — | Both entries return to waiting in that round. In round one they keep their slots, so the pair shows as two waiting players who can be re-paired by Force Pair or "Pair two waiting players"; a slot is only released when its player is removed. |
+| Remove a player | 5.7 | Their not-started matches are deleted and finished matches they **won** are voided, unwinding the winner's later place; a finished match they **lost** stays as history (and so does that entry row). Refuses, naming the match, if one of theirs is in play or a later match has started. |
 | Pair two waiting players | 5.5 (Force Pair placement) | No randomness and no round-one restriction. |
 | Add a player to the night | 5.2 (placement) | Ignores `open_slots`, `buybacks_closed_at` and the one-buy-back rule. Grows the bracket to 32 first if 16 is full. |
-| Remove a player | 5.7 | Cascades as far as the last round with no started match; refuses and names the match if it cannot go far enough. |
 | Replace a player in a match | 5.6 | Recomputes `start_points`, `start_entry_id` and both rating snapshots. |
 | Grant / revoke a free pass | 5.4 | Direct write to `free_passes`. |
 | Reopen buy-backs | — | Clears `buybacks_closed_at`. |
@@ -960,7 +962,7 @@ There is no delete route and no `on delete cascade` anywhere pointing at this ta
 | winner_entry_id | uuid | FK → entries, nullable |
 | created_at | timestamptz | not null, default now() |
 
-At most one competition may be `setup` or `in_progress` at a time: partial unique index on `(status) where status in ('setup','in_progress')`. Abandoning (5.11) frees it immediately.
+At most one competition may be `setup` or `in_progress` at a time: partial unique index on a constant, `((1)) where status in ('setup','in_progress')`, so one of each is not allowed either. Abandoning (5.11) frees it immediately.
 
 The four rating columns are snapshotted from the previous competition when a new one is created, so last week's review is never rewritten by this week's settings (O-1).
 
@@ -977,6 +979,7 @@ The four rating columns are snapshotted from the previous competition when a new
 | rebuy_of_entry_id | uuid | FK → entries, nullable, unique; set when this buy-back entry is a round-one loser re-entering (null for a late arrival) |
 | buyback_decision | buyback_decision | nullable; set on a **first-draw** entry when it loses in round one |
 | rating_at_entry | integer | not null, snapshot of the player's rating at entry time |
+| joined_round | smallint | not null, default 1; the round the entry joined in. 1 for the draw and every buy-back; higher only when the master override adds a player after round one (3.9), so they are a waiting player in that round rather than in round one |
 | entered_at | timestamptz | not null, default now() |
 
 Constraints and consequences:
@@ -1094,7 +1097,7 @@ The admin bracket screen calls the same bracket payload via `GET /api/admin/brac
 | `DELETE /api/admin/competitions/{id}/entries/{entry_id}` | — | Only while `setup`. Removing a player from a running night is an override (7.7). | Yes |
 | `POST /api/admin/competitions/{id}/start` | — | `setup`; `2 ≤ entries ≤ bracket_size`. Runs 5.1 in a transaction: snapshots ratings, assigns slots, creates matches with starts, sets `started_at`, `status = in_progress`. | Yes |
 | `POST /api/admin/competitions/{id}/force-pair` | — | Round one only; ≥ 2 waiting players; else `409`. Runs 5.5. | Yes |
-| `POST /api/admin/competitions/{id}/close-buybacks` | — | Round one, buy-backs open; else `409`. Runs 5.3. Response reports how many free passes were granted, so the screen can show it. | Yes |
+| `POST /api/admin/competitions/{id}/close-buybacks` | `{ dry_run? }` | Round one, buy-backs open; else `409`. Runs 5.3. Response reports how many free passes were granted and to whom, so the screen can show it; `{ dry_run: true }` returns the same answer without writing, which is what the confirmation on 3.4 uses. | Yes |
 | `POST /api/admin/competitions/{id}/abandon` | — | `setup` or `in_progress`; else `409`. Runs 5.11 and writes an `admin_actions` row (O-7). | Yes |
 | `GET /api/admin/bracket` | — | Same payload as the public bracket, uncached. | Yes |
 
@@ -1143,7 +1146,7 @@ Why not Vercel: the Hobby tier is licensed for personal, non-commercial use, and
 ### 8.1 First-time setup
 
 1. Push the repo to GitHub. Keep `main` as the production branch.
-2. Create a Supabase project (free tier, region Sydney). Run the SQL migrations from `supabase/migrations/` in the SQL editor, or with the Supabase CLI. Enable RLS on every table (6.5).
+2. Create a Supabase project (free tier, region Sydney). Apply the schema: either run `DATABASE_URL=<connection string> npm run db:migrate` locally, or paste `supabase/migrations/0001_init.sql` into the SQL editor. The migration enables RLS on every table itself (6.5).
 3. In Netlify, "Add new site" → "Import an existing project" → the GitHub repo. Netlify detects Next.js and installs its Next.js runtime; build command `npm run build`, no publish directory to set.
 4. Set the environment variables below under Site configuration → Environment variables, for Production and Deploy previews.
 5. Add `netlify.toml` with the daily ping as a scheduled function:
@@ -1167,11 +1170,12 @@ Why not Vercel: the Hobby tier is licensed for personal, non-commercial use, and
 | --- | --- | --- | --- |
 | `ADMIN_CODES` | Login route, cookie signing | **Yes** | The organisers and their codes, as `Name:code` pairs separated by commas — e.g. `Gabriel:kf83hs2b,Steve:pw9dk21m` (O-8). Names are 1–40 characters and may not contain `:` or `,`. Codes are 12+ characters; they are typed on a phone, so avoid ambiguous characters. |
 | `ADMIN_CODE` | Login route | **Yes** | Optional fallback for a single unnamed organiser. Used only when `ADMIN_CODES` is unset, and treated as `Organiser:{value}`. |
-| `SUPABASE_URL` | Server Supabase client | Yes | Project URL. Not prefixed `NEXT_PUBLIC_` because no browser code talks to Supabase. |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server Supabase client | **Yes, never expose** | Full-access key. Must never be prefixed `NEXT_PUBLIC_`, imported in a client component, or logged. |
+| `DATABASE_URL` | Server Postgres client (postgres.js) | **Yes, never expose** | The Supabase connection string (Project settings → Database → Connection string, **Transaction** pooler, port 6543). It carries the database password, so it must never be prefixed `NEXT_PUBLIC_`, imported in a client component, or logged. The app talks to Postgres directly rather than through the Supabase JS client because the writes in section 7 need real transactions and `select … for update`. |
 | `CRON_SECRET` | `/api/cron/ping` and the scheduled function | Yes | Any random string. |
 
 No `NEXT_PUBLIC_*` variables are needed. Never commit `.env*` files; use `.env.example` with blank values for onboarding.
+
+**Local development needs no database service.** When `DATABASE_URL` is unset the app runs on PGlite, an embedded Postgres, stored under `.data/pglite` (gitignored) and migrated automatically on first start; `npm run db:seed` adds sample players. The tests use the same engine in memory. Delete `.data/pglite` to start again from an empty database.
 
 ### 8.3 Rotating an admin code
 
