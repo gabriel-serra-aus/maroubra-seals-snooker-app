@@ -1,5 +1,6 @@
 // Hand-rolled input checks. Each returns the typed value or throws a 400 naming the field.
 import { badRequest } from "@/lib/logic/errors";
+import { RATING_MAX, RATING_MIN } from "@/lib/logic/ratings";
 
 type Body = Record<string, unknown>;
 
@@ -74,7 +75,6 @@ export function optionalUuid(body: Body, key: string): string | undefined {
 }
 
 /** Rating: integer in -100..200, negatives allowed (spec 5.6). */
-export const RATING_MIN = -100;
-export const RATING_MAX = 200;
+export { RATING_MAX, RATING_MIN };
 export const requiredRating = (body: Body, key = "rating") => requiredInt(body, key, RATING_MIN, RATING_MAX);
 export const optionalRating = (body: Body, key = "rating") => optionalInt(body, key, RATING_MIN, RATING_MAX);

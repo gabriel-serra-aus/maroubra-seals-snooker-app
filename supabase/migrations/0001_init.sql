@@ -68,6 +68,8 @@ create table entries (
   rebuy_of_entry_id uuid unique references entries (id),
   buyback_decision buyback_decision,
   rating_at_entry integer not null,
+  -- The round the entry joined in: 1 for the draw and every buy-back; later only via the override (3.9).
+  joined_round smallint not null default 1 check (joined_round >= 1),
   entered_at timestamptz not null default now(),
   constraint entries_slot_unique unique (competition_id, slot) deferrable initially deferred,
   constraint entries_buyback_seq_unique unique (competition_id, buyback_seq),
