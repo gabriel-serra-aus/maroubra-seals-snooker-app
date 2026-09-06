@@ -9,17 +9,17 @@ Three documents define this project. **Read them before changing behaviour — d
 
 - [snooker-comp-rules.md](snooker-comp-rules.md) — the competition rules.
   - **Part A** = player-facing rules (format, fees, buy-backs, time limit, handicaps, conduct).
-  - **Part B** = the app specification (setup/start, buy-back modes, Force Pair, closing buy-backs, timer and match states, handicap ratings). Part B section numbers 8–13 are the functional requirements; cite them in code comments and PRs.
-- [functional-spec.md](functional-spec.md) — screens, state machines, bracket logic, data model, routes. It carries the organiser's rulings on everything the other two left open, numbered O-1 … O-12; cite those the same way (e.g. "per O-4").
+  - **Part B** = the app specification (setup/start, buy-back placement, Force Pair, closing buy-backs and the fixed bracket, timer and match states, handicap ratings). Part B section numbers 8–13 are the functional requirements; cite them in code comments and PRs.
+- [functional-spec.md](functional-spec.md) — screens, state machines, bracket logic, data model, routes. It carries the organiser's rulings on everything the other two left open, numbered O-1 … O-14; cite those the same way (e.g. "per O-4").
 - [tournament-app-plan.md](tournament-app-plan.md) — hosting, framework, database, admin access, cost.
 
-If they conflict, the rules file wins on behaviour and the plan file wins on infrastructure — **except** where the functional spec records an organiser ruling, which supersedes both. All three files have been synced to the O-1 … O-12 rulings (spec 10.2 lists what changed in the rules file), so a disagreement between them now means one of them is stale — fix it rather than picking a side. If a requirement is genuinely absent from all three, ask the organiser rather than inventing one.
+If they conflict, the rules file wins on behaviour and the plan file wins on infrastructure — **except** where the functional spec records an organiser ruling, which supersedes both. All three files have been synced to the O-1 … O-14 rulings (spec 10.2 lists what changed in the rules file), so a disagreement between them now means one of them is stale — fix it rather than picking a side. If a requirement is genuinely absent from all three, ask the organiser rather than inventing one.
 
 ## The domain in one paragraph
 
-16 or 32 players are drawn at random into a round-one bracket. Every match is one frame with a 25-minute clock. **A rating is a golf-style handicap: lower is better, and it can be negative.** The weaker player — the one with the *higher* number — starts with two thirds of the difference, rounded (§6 says "lower-rated player", meaning lower in ability; spec 5.6). Round-one losers may buy back once, optionally, and fill the empty bracket slots — empty matches first, so buy-backs meet buy-backs; round-two losers are out. Buy-backs are capped by the open slots, first come first served. When the window closes, everyone still without an opponent goes to round two, so round one can give several free passes (O-4). The organiser starts and completes each match in the app; winners advance automatically.
+16 or 32 players are drawn at random into a round-one bracket. Every match is one frame with a 25-minute clock. **A rating is a golf-style handicap: lower is better, and it can be negative.** The weaker player — the one with the *higher* number — starts with two thirds of the difference, rounded (§6 says "lower-rated player", meaning lower in ability; spec 5.6). Round-one losers may buy back once, optionally, and go straight into the bracket: a random empty match while one exists, then beside a random lone player (O-13); round-two losers are out. Buy-backs are capped by the open slots, first come first served. **The bracket is fixed** (O-14): a player's round-one slot sets their place in the whole tree, the winners of M1 and M2 meet in round two, and a winner moves up the moment their match ends. A free pass is what an empty other half gives you, in any round, possibly several in a row; when the buy-back window closes everyone still alone in round one gets one (O-4). The organiser starts and completes each match in the app.
 
-Vocabulary used throughout code and UI (keep it consistent with the rules doc): **waiting player**, **buy-back**, **free pass**, **Force Pair**, **Close Buy-Backs**, **bracket size**, **slot**, **rating**, **start** (the handicap head start), **master override**.
+Vocabulary used throughout code and UI (keep it consistent with the rules doc): **waiting player**, **buy-back**, **free pass**, **Force Pair**, **Close Buy-Backs**, **bracket size**, **slot**, **box** (a position in the tree), **rating**, **start** (the handicap head start), **master override**.
 
 ## Stack
 
@@ -31,7 +31,7 @@ Vocabulary used throughout code and UI (keep it consistent with the rules doc): 
 | Auth      | `ADMIN_CODES` env var (`Name:code` pairs) + session cookie | One code per organiser; the code identifies who, so "changed by" is never typed (O-8). No accounts, no resets, no email |
 | Ratings   | Integer, `-100..200`, **lower is better** | Golf-style handicap; negatives are normal for strong players (§6, spec 5.6) |
 
-Local tooling present: Node 25, npm 11, git. Netlify CLI and `gh` are **not** installed — install them before attempting a CLI deploy, or use the Netlify/GitHub web UI. `npm run dev` needs no database service (PGlite); `npm test` runs the logic unit tests and the route-level integration tests on in-memory PGlite. If `0001_init.sql` changes before the first production deploy, delete `.data/pglite` and re-run `npm run db:migrate && npm run db:seed`.
+Local tooling present: Node 25, npm 11, git. Netlify CLI and `gh` are **not** installed — install them before attempting a CLI deploy, or use the Netlify/GitHub web UI. `npm run dev` needs no database service (PGlite); `npm test` runs the logic unit tests and the route-level integration tests on in-memory PGlite. New migrations apply themselves to `.data/pglite` on the next start; to start from scratch delete `.data/pglite` and re-run `npm run db:migrate && npm run db:seed`.
 
 ## Architecture rules
 
@@ -39,7 +39,8 @@ Local tooling present: Node 25, npm 11, git. Netlify CLI and `gh` are **not** in
 - **The database is the source of truth for match state**, not client state. The public page reads; only admin routes write.
 - **Every write route checks the admin session cookie.** No exceptions, including "harmless" ones.
 - **The timer is computed from a stored `started_at` timestamp**, never from a client-side counter — the countdown must survive navigation, refresh and a locked phone (rules §12).
-- **Advancement is automatic on completion**, and reversible while the winner's next match has not started (rules §12). A mistaken Start is reversible too (O-5). Model corrections explicitly; don't rely on manual DB edits.
+- **Advancement is automatic on completion** and runs as one idempotent step after every write (`advanceAll` in `lib/logic/rounds.ts`): it pushes every waiting player up the fixed tree until nothing moves. It is reversible while the winner's next match has not started (rules §12). A mistaken Start is reversible too (O-5). Model corrections explicitly; don't rely on manual DB edits.
+- **Every mutating route returns the fresh bracket**, and the admin screens use it instead of fetching again: one round trip per tap. Keep it that way — the club phone is on the far side of the Pacific from Netlify's default region.
 - **Nothing is only fixable in the database.** The master override screen (spec 3.9, O-5) is the escape hatch for everything the normal guards refuse — adding and removing players, resetting a finished match, reopening buy-backs. Every override writes an `admin_actions` row naming the organiser.
 - **Prefer boring and obvious.** This runs one night a week on a club phone. Fewer moving parts beats clever.
 
@@ -48,14 +49,14 @@ Local tooling present: Node 25, npm 11, git. Netlify CLI and `gh` are **not** in
 Bracket logic is where the bugs will be, so it is where the tests go. Cover at minimum:
 
 - Round-one fill with 16 and 32, with empty slots reserved for buy-backs.
-- The free-slot order: empty matches before the slot beside a waiting first-draw player (O-4, and §3's rule that buy-backs meet each other).
+- Placement order (O-13): a random empty match first, even while a first-draw player waits alone; then beside a random lone player; three buy-backs take three different empty matches and the fourth joins one.
 - Buy-back capacity capped by open slots, first come first served (O-3).
 - Close with 3, 2, 1 and 0 buy-backs on a 13-of-16 bracket → 0, 1, **2** and 1 free passes (O-4). The two-free-pass case is the one that regresses to the old §11 rule.
-- Rounds two onwards never give more than one free pass.
-- Both buy-back modes (§9) and the mode switch mid-round-one.
-- Force Pair: no-op under two waiting players, never breaks an existing match, hidden from round two (§10).
+- The fixed tree (O-14): positional numbering (16: M9 = M1/M2 winners, M15 final; 32: M17…M31); a round-two match forms while round one is still going; no skip while buy-backs are open; after close an empty half gives an immediate pass and cascades (9 players: slot 9 reaches the final unplayed); 13 players + 3 buy-backs is a perfect eight with no pass.
+- Force Pair: no-op under two waiting players, never breaks an existing match, refused once buy-backs close (§10).
 - Handicap start calculation and rounding: the §6 example (45 vs 20 → 17, to the player on **45**) and negative ratings on both sides of zero.
-- Result correction pulling a player back out of the next round; rejection when the loser's buy-back match has started (O-6).
+- Result correction pulling a player back out of the next round, the other player waiting in the box until the new winner arrives; rejection when the loser's buy-back match has started (O-6).
+- Overrides: delete refused from round two, pair needs the same box, add climbs from an open place, grow renumbers M9 → M17, reopen takes the close's passes back.
 - Cancel start clears the clock and leaves the pairing intact (O-5).
 - Rating adjustment: finishing order, the configurable top/bottom groups, a handicap crossing zero into negative, clamping, and idempotence on a second save (O-1).
 
@@ -64,7 +65,7 @@ UI can be checked by hand; the logic cannot.
 ## Deployment
 
 1. Push to GitHub; connect the repo to Netlify.
-2. Set env vars in Netlify: `ADMIN_CODES`, `CRON_SECRET` and `DATABASE_URL` (the Supabase transaction-pooler connection string). `DATABASE_URL` carries the database password and is **server-only** — never expose it to the browser or prefix it with `NEXT_PUBLIC_`. Apply the schema once with `npm run db:migrate` against that URL (or paste `supabase/migrations/0001_init.sql` into the Supabase SQL editor).
+2. Set env vars in Netlify: `ADMIN_CODES`, `CRON_SECRET` and `DATABASE_URL` (the Supabase transaction-pooler connection string). `DATABASE_URL` carries the database password and is **server-only** — never expose it to the browser or prefix it with `NEXT_PUBLIC_`. Apply the schema with `npm run db:migrate` against the **session**-pooler URL (port 5432); it applies every file in `supabase/migrations/` not yet recorded, so run it again whenever a migration is added (`0002_fixed_bracket.sql` is pending on production until then). Set the **Netlify functions region to Sydney** in Site configuration — the database is in Sydney and the default region is in the US.
 3. `main` deploys to production; branches get deploy previews. Rotate one organiser's code by updating `ADMIN_CODES` and redeploying — it logs out only that person.
 4. A daily Netlify scheduled function pings the database so the free Supabase project doesn't pause.
 5. Never commit `.env*` files or real credentials.

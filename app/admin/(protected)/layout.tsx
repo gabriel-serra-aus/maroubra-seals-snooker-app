@@ -14,6 +14,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className="topbar">
         <div className="inner">
           <nav>
+            <Link href="/admin" className="logo-link" aria-label="Bracket">
+              {/* Served as-is from public/: three fixed sizes, no image service needed (plan: cheap and self-contained). */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/club-logo-small.png" alt="" className="logo-sm" />
+            </Link>
             <Link href="/admin"><strong>Bracket</strong></Link>
             <Link href="/admin/setup">Setup</Link>
             <Link href="/admin/players">Players</Link>

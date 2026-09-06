@@ -1,6 +1,7 @@
-// Derived, never stored (spec 6.3 "Derived per-entry status"): where each entry is in the night,
-// who is waiting, the current round, open slots and the free-slot order.
+// Derived, never stored (spec 6.3 "Derived per-entry status"): where each entry is in the night, who is
+// waiting, the current round, open slots, and the geometry of the fixed bracket (spec 5.4, O-14).
 
+import { shuffle, type Rng } from "./random";
 import type { EntryRow, MatchRow, Snapshot } from "./types";
 
 export type Position =
@@ -8,6 +9,30 @@ export type Position =
   | { status: "in_match"; round: number; matchId: string }
   | { status: "out"; round: number }
   | { status: "winner"; round: number };
+
+// ---- Bracket geometry (spec 5.4). Everything follows from the round-one slot. ----
+
+/** Rounds in a bracket: 16 -> 4, 32 -> 5. The final is round roundsFor(B), box 1. */
+export const roundsFor = (bracketSize: number) => Math.round(Math.log2(bracketSize));
+/** The box (match position) a slot belongs to in round r: 1..B/2^r. */
+export const boxOf = (slot: number, round: number) => Math.ceil(slot / 2 ** round);
+/** Slots covered by box k of round r, inclusive. */
+export const slotRangeOf = (round: number, k: number): [number, number] => [(k - 1) * 2 ** round + 1, k * 2 ** round];
+/** Match number for box k of round r: round one is M1..M(B/2), each later round continues on. */
+export const matchNumberFor = (bracketSize: number, round: number, k: number) => bracketSize - bracketSize / 2 ** (round - 1) + k;
+/** Inverse of matchNumberFor for an existing match. */
+export const boxOfMatch = (bracketSize: number, m: MatchRow) => m.number - (bracketSize - bracketSize / 2 ** (m.round - 1));
+export const mateSlot = (slot: number) => (slot % 2 === 1 ? slot + 1 : slot - 1);
+export const matchNumberForSlot = (slot: number) => boxOf(slot, 1);
+
+/** The other half of the box `slot` sits in for `round`: the slots its opponent must come from. */
+export function siblingHalf(slot: number, round: number): [number, number] {
+  const [lo, hi] = slotRangeOf(round, boxOf(slot, round));
+  const mid = lo + 2 ** (round - 1) - 1;
+  return slot <= mid ? [mid + 1, hi] : [lo, mid];
+}
+
+// ---- Lookups ----
 
 export function entryById(s: Snapshot, id: string): EntryRow {
   const e = s.entries.find((x) => x.id === id);
@@ -40,12 +65,9 @@ export function opponentOf(m: MatchRow, entryId: string): string {
   return m.player_a_id === entryId ? m.player_b_id : m.player_a_id;
 }
 
-/** Highest round anything exists in; 1 before the first match. */
-export function currentRound(s: Snapshot): number {
-  let r = 1;
-  for (const m of s.matches) r = Math.max(r, m.round);
-  for (const fp of s.freePasses) r = Math.max(r, fp.from_round);
-  return r;
+export function matchAtBox(s: Snapshot, round: number, k: number): MatchRow | undefined {
+  const B = s.competition.bracket_size;
+  return s.matches.find((m) => m.round === round && boxOfMatch(B, m) === k);
 }
 
 /** Where an entry is right now, worked out from its matches and free passes. */
@@ -82,7 +104,39 @@ export function isWaitingIn(s: Snapshot, entryId: string, round: number): boolea
   return p.status === "waiting" && p.round === round;
 }
 
-/** bracket_size − entries: the whole of the O-3 cap. */
+/**
+ * The round the night is at: the lowest round with an unfinished match or a waiting player. Rounds overlap
+ * under fixed advancement (M9 can be in play while M7 has not started), so this is the header's number,
+ * not a gate. The final round once everything is done.
+ */
+export function currentRound(s: Snapshot): number {
+  const R = roundsFor(s.competition.bracket_size);
+  if (s.competition.status === "complete") return R;
+  for (let r = 1; r <= R; r++) {
+    if (s.matches.some((m) => m.round === r && m.state !== "finished")) return r;
+    if (waitingEntries(s, r).length > 0) return r;
+  }
+  let r = 1;
+  for (const m of s.matches) r = Math.max(r, m.round);
+  for (const fp of s.freePasses) r = Math.max(r, fp.from_round);
+  return Math.min(r, R);
+}
+
+/** Highest round anything exists in (a match, a free pass, a waiting player): the rounds to display. */
+export function lastRound(s: Snapshot): number {
+  const R = roundsFor(s.competition.bracket_size);
+  if (s.competition.status === "complete") return R;
+  let r = 1;
+  for (const m of s.matches) r = Math.max(r, m.round);
+  for (const fp of s.freePasses) r = Math.max(r, fp.from_round + 1);
+  for (const e of s.entries) {
+    const p = positionOf(s, e.id);
+    if (p.status === "waiting") r = Math.max(r, p.round);
+  }
+  return Math.min(r, R);
+}
+
+/** bracket_size - entries: the whole of the O-3 cap. */
 export function openSlots(s: Snapshot): number {
   return s.competition.bracket_size - s.entries.length;
 }
@@ -91,45 +145,41 @@ export function entryAtSlot(s: Snapshot, slot: number): EntryRow | undefined {
   return s.entries.find((e) => e.slot === slot);
 }
 
-export const mateSlot = (slot: number) => (slot % 2 === 1 ? slot + 1 : slot - 1);
-export const matchNumberForSlot = (slot: number) => Math.ceil(slot / 2);
-
 /**
- * The free-slot order (spec 5.2): free slots whose pair holds no first-draw player first, then the rest,
- * each ascending by slot number. A slot beside a player who is not waiting (a free-pass holder after
- * close) is not free — filling it would pair someone who has already advanced.
+ * Where the next buy-back or late arrival goes (spec 5.2, O-13): a random empty match while one exists,
+ * otherwise a random free seat beside a lone round-one player, first-draw or buy-back alike.
  */
-export function freeSlotOrder(s: Snapshot): number[] {
+export function pickFreeSlot(s: Snapshot, rng: Rng): number | undefined {
   const B = s.competition.bracket_size;
-  const first: number[] = [];
-  const second: number[] = [];
-  for (let slot = 1; slot <= B; slot++) {
-    if (entryAtSlot(s, slot)) continue;
-    const mate = entryAtSlot(s, mateSlot(slot));
-    if (!mate) first.push(slot);
-    else if (!isWaitingIn(s, mate.id, 1)) continue;
-    else if (mate.source === "draw") second.push(slot);
-    else first.push(slot);
-  }
-  return [...first, ...second];
-}
-
-/** Round-one slot pairs holding exactly one player: the "awaiting opponent" rows. */
-export function halfFullPairs(s: Snapshot): Array<{ number: number; slot: number; entry: EntryRow }> {
-  const out: Array<{ number: number; slot: number; entry: EntryRow }> = [];
-  const B = s.competition.bracket_size;
+  const emptyPairs: number[] = [];
+  const loneSeats: number[] = [];
   for (let k = 1; k <= B / 2; k++) {
     const a = entryAtSlot(s, 2 * k - 1);
     const b = entryAtSlot(s, 2 * k);
-    const one = a && !b ? a : b && !a ? b : undefined;
-    if (one && isWaitingIn(s, one.id, 1)) out.push({ number: k, slot: one.slot!, entry: one });
+    if (!a && !b) emptyPairs.push(2 * k - 1);
+    else if (!a && b && isWaitingIn(s, b.id, 1)) loneSeats.push(2 * k - 1);
+    else if (!b && a && isWaitingIn(s, a.id, 1)) loneSeats.push(2 * k);
   }
-  return out;
+  if (emptyPairs.length) return shuffle(emptyPairs, rng)[0];
+  if (loneSeats.length) return shuffle(loneSeats, rng)[0];
+  return undefined;
 }
+
+/** Players waiting in `round` with no opponent yet, with the box they sit in (every round). */
+export function loneWaiters(s: Snapshot, round: number): Array<{ number: number; slot: number; entry: EntryRow }> {
+  const B = s.competition.bracket_size;
+  return waitingEntries(s, round)
+    .filter((e) => e.slot !== null)
+    .map((e) => ({ number: matchNumberFor(B, round, boxOf(e.slot!, round)), slot: e.slot!, entry: e }))
+    .sort((a, b) => a.slot - b.slot);
+}
+
+/** Round-one slot pairs holding exactly one player: the "awaiting opponent" rows. */
+export const halfFullPairs = (s: Snapshot) => loneWaiters(s, 1);
 
 /** True while entries are still accepted (spec 4.2). */
 export function buybacksOpen(s: Snapshot): boolean {
-  return s.competition.status === "in_progress" && currentRound(s) === 1 && s.competition.buybacks_closed_at === null;
+  return s.competition.status === "in_progress" && s.competition.buybacks_closed_at === null;
 }
 
 export function buybackEntryOf(s: Snapshot, playerId: string): EntryRow | undefined {

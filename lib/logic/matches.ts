@@ -5,20 +5,13 @@ import { handicapStart } from "./handicap";
 import {
   entryAtSlot,
   entryById,
-  freeSlotOrder,
   isWaitingIn,
   mateSlot,
   matchNumberForSlot,
+  pickFreeSlot,
   playerRating,
 } from "./derive";
 import type { Ctx, EntryRow, MatchOrigin, MatchRow, Snapshot } from "./types";
-
-/** Round two onwards continue from bracket_size / 2 + 1 in creation order (spec 5.4). */
-export function nextMatchNumber(s: Snapshot): number {
-  let n = s.competition.bracket_size / 2;
-  for (const m of s.matches) n = Math.max(n, m.number);
-  return n + 1;
-}
 
 /** Builds a match between two entries, snapshotting both ratings and the start (spec 5.6). */
 export function createMatch(
@@ -31,6 +24,7 @@ export function createMatch(
   origin: MatchOrigin,
 ): MatchRow {
   if (aId === bId) throw conflict("A match needs two different players");
+  if (s.matches.some((m) => m.number === number)) throw conflict(`M${number} already exists`);
   const a = entryById(s, aId);
   const b = entryById(s, bId);
   const ratingA = playerRating(s, a.player_id);
@@ -73,7 +67,7 @@ export function refreshStart(s: Snapshot, m: MatchRow): void {
 
 /**
  * Puts a round-one entry into a slot, and creates the match if that fills its pair.
- * `slot` may be forced (Force Pair); otherwise the first slot in the free-slot order is used.
+ * `slot` may be forced (Force Pair, override); otherwise the placement rule of spec 5.2 picks one at random.
  */
 export function placeInSlot(
   s: Snapshot,
@@ -82,7 +76,7 @@ export function placeInSlot(
   origin: MatchOrigin,
   slot?: number,
 ): MatchRow | null {
-  const target = slot ?? freeSlotOrder(s)[0];
+  const target = slot ?? pickFreeSlot(s, ctx.rng);
   if (target === undefined) throw conflict("No free slot in the bracket");
   if (entryAtSlot(s, target)) throw conflict(`Slot ${target} is taken`);
   entry.slot = target;

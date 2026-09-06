@@ -2,7 +2,6 @@
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { mutateCompetition } from "@/lib/api/mutate";
-import { competitionIdOfMatch } from "@/lib/api/routes";
 import { optionalInt } from "@/lib/api/validate";
 import { badRequest } from "@/lib/logic/errors";
 import { setMatchTimeLimit } from "@/lib/logic/matchControl";
@@ -13,7 +12,6 @@ export const PATCH = handle(async (request, { params }) => {
   const body = await readJson(request);
   if (!("time_limit_minutes" in body)) throw badRequest("time_limit_minutes is required (a number, or null for the default)");
   const minutes = optionalInt(body, "time_limit_minutes", 1, 180) ?? null;
-  const competitionId = await competitionIdOfMatch(id);
-  const r = await mutateCompetition(session, { competitionId }, (s) => setMatchTimeLimit(s, id, minutes));
+  const r = await mutateCompetition(session, { matchId: id }, (s) => setMatchTimeLimit(s, id, minutes));
   return json({ ok: true, bracket: r.bracket });
 });

@@ -5,7 +5,7 @@ A single-night, single-elimination snooker competition manager. One organiser ru
 The behaviour is specified in three documents, which win over anything written here:
 
 - [snooker-comp-rules.md](snooker-comp-rules.md) — the competition rules (Part A for players, Part B for the app).
-- [functional-spec.md](functional-spec.md) — screens, state machines, bracket logic, data model, routes, and the organiser's rulings O-1 … O-12.
+- [functional-spec.md](functional-spec.md) — screens, state machines, bracket logic, data model, routes, and the organiser's rulings O-1 … O-14.
 - [zzz_tournament-app-plan.md](zzz_tournament-app-plan.md) — hosting, framework, database, admin access, cost.
 
 ## Run it locally
@@ -32,15 +32,15 @@ The bracket logic lives in `lib/logic/` as pure functions and carries the tests 
 
 ## Deploy (Netlify + Supabase, both free tiers)
 
-1. **Supabase**: create a project (Sydney). Copy the **Transaction** pooler connection string (port 6543) from Project settings → Database. Apply the schema once:
+1. **Supabase**: create a project (Sydney). Copy the **Transaction** pooler connection string (port 6543) from Project settings → Database for the app, and the **Session** pooler string (port 5432) for migrations. Apply the schema:
 
    ```
-   DATABASE_URL="postgresql://…" npm run db:migrate
+   DATABASE_URL="postgresql://…:5432/postgres" npm run db:migrate
    ```
 
-   or paste `supabase/migrations/0001_init.sql` into the SQL editor.
+   It applies every file in `supabase/migrations/` that is not yet recorded, so run it again after pulling a change that adds one (or paste the new file into the SQL editor).
 
-2. **Netlify**: Add new site → Import an existing project → this GitHub repo. Netlify detects Next.js; the build command is `npm run build` (already in `netlify.toml`).
+2. **Netlify**: Add new site → Import an existing project → this GitHub repo. Netlify detects Next.js; the build command is `npm run build` (already in `netlify.toml`). In Site configuration set the **functions region to Sydney (ap-southeast-2)**: the database is in Sydney, functions default to the US, and every tap on the club phone makes a handful of database round trips.
 
 3. **Environment variables** (Site configuration → Environment variables, for Production and Deploy previews):
 
@@ -60,11 +60,12 @@ The bracket logic lives in `lib/logic/` as pure functions and carries the tests 
 
 ```
 app/                Next.js App Router: pages under app/admin, API routes under app/api
-components/         client components (bracket, dialogs, timer, override panel)
-lib/logic/          pure bracket logic (draw, placement, close, rounds, Force Pair, complete/correct, ratings, override)
+components/         client components (bracket list and tree, dialogs, timer, settings, override panel)
+lib/logic/          pure bracket logic (draw, placement, close, the fixed tree, Force Pair, complete/correct, ratings, override)
 lib/db/             Postgres adapter (postgres.js / PGlite), snapshot loader, diff writer
 lib/auth/           ADMIN_CODES parsing and the signed session cookie
 lib/bracket/        the bracket JSON payload shared by the public and admin screens
-supabase/migrations/ the schema (functional-spec.md section 6)
+supabase/migrations/ the schema (functional-spec.md section 6), applied in filename order
+public/, app/icon.png the club badge in the sizes the pages use; assets/ holds the original
 tests/              vitest: tests/logic (pure), tests/integration (route handlers on PGlite)
 ```

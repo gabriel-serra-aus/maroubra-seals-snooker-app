@@ -2,7 +2,7 @@ import { addDrawEntry, startCompetition } from "@/lib/logic/competition";
 import { currentRound, matchLabel } from "@/lib/logic/derive";
 import { completeMatch, startMatch, type LoserDecision } from "@/lib/logic/matchControl";
 import { seededRng } from "@/lib/logic/random";
-import type { BracketSize, BuybackMode, Ctx, EntryRow, MatchRow, PlayerRow, Snapshot } from "@/lib/logic/types";
+import type { BracketSize, Ctx, EntryRow, MatchRow, PlayerRow, Snapshot } from "@/lib/logic/types";
 
 export const NOW = new Date("2026-09-11T09:00:00Z");
 
@@ -14,7 +14,6 @@ export function makeCtx(seed = 1): Ctx {
 export interface NightOpts {
   bracket: BracketSize;
   ratings: number[];
-  mode?: BuybackMode;
   topCount?: number;
   topDelta?: number;
   bottomCount?: number;
@@ -30,7 +29,6 @@ export function setupNight(opts: NightOpts, ctx = makeCtx()): { s: Snapshot; ctx
       name: "Friday",
       status: "setup",
       bracket_size: opts.bracket,
-      buyback_mode: opts.mode ?? "random_draw",
       default_time_limit_minutes: 25,
       rating_top_count: opts.topCount ?? 3,
       rating_top_delta: opts.topDelta ?? -1,
@@ -65,6 +63,8 @@ export const match = (s: Snapshot, number: number): MatchRow => {
   return m;
 };
 
+export const hasMatch = (s: Snapshot, number: number) => s.matches.some((x) => x.number === number);
+
 export const slotEntry = (s: Snapshot, slot: number): EntryRow => {
   const e = s.entries.find((x) => x.slot === slot);
   if (!e) throw new Error(`no entry in slot ${slot}`);
@@ -81,6 +81,8 @@ export const nameOf = (s: Snapshot, entryId: string) => {
   const e = s.entries.find((x) => x.id === entryId)!;
   return s.players.find((p) => p.id === e.player_id)!.name;
 };
+
+export const entry = (s: Snapshot, id: string): EntryRow => s.entries.find((e) => e.id === id)!;
 
 /** Start then complete a match. `winner` = "a" | "b" | entry id. */
 export function play(s: Snapshot, ctx: Ctx, number: number, winner: "a" | "b" | string, decision?: LoserDecision) {
@@ -106,6 +108,13 @@ export function playRound(
     play(s, ctx, m.number, w, eligible ? decide(m, loser) : undefined);
     if (s.competition.status !== "in_progress") return;
   }
+}
+
+/** Plays the whole night out, round by round, until there is a winner. */
+export function playToEnd(s: Snapshot, ctx: Ctx, limit = 40) {
+  let guard = 0;
+  while (s.competition.status === "in_progress" && guard++ < limit) playRound(s, ctx);
+  if (s.competition.status === "in_progress") throw new Error("playToEnd: the night did not finish");
 }
 
 export const freePassRounds = (s: Snapshot) => s.freePasses.map((fp) => fp.from_round);

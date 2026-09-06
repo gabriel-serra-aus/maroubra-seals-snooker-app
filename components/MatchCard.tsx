@@ -12,6 +12,9 @@ export interface MatchActions {
   onCorrect: (m: MatchView) => void;
   onCancelStart: (m: MatchView) => void;
   onSetLimit: (m: MatchView) => void;
+  /** Every button is disabled while any action is in flight; the card acted on shows "Saving…". */
+  busy: boolean;
+  pendingMatchId: string | null;
 }
 
 export function PlayerLine({ e, m, className }: { e: EntryView; m: MatchView; className?: string }) {
@@ -37,17 +40,25 @@ export function MatchCard({ m, now, actions, expandable }: { m: MatchView; now: 
   const [open, setOpen] = useState(false);
   const clock = m.state === "in_play" ? matchClock(m.started_at, m.time_limit_minutes, now) : null;
   const timedOut = clock?.timed_out ?? false;
+  const pending = actions?.pendingMatchId === m.id;
+  const disabled = actions?.busy ?? false;
   return (
-    <div className={`match ${m.state}`} onClick={expandable ? () => setOpen((o) => !o) : undefined}>
+    <div className={`match ${m.state} ${pending ? "pending" : ""}`} aria-busy={pending} onClick={expandable ? () => setOpen((o) => !o) : undefined}>
       <div className="head">
         <span>
           {m.label} <span className={`state ${m.state}`}>{m.state === "in_play" ? "●" : m.state === "finished" ? "■" : "○"} {STATE_LABEL[m.state]}</span>
           {timedOut && <span className="timed-out"> ⚠ TIMED OUT</span>}
         </span>
         <span className="muted">
-          {m.state === "in_play" && clock && (timedOut ? "00:00" : `${formatRemaining(clock.remaining_ms)} left`)}
-          {m.state === "not_started" && `limit: ${m.time_limit_minutes} min`}
-          {m.state === "finished" && m.corrected_at && "corrected"}
+          {pending ? (
+            <span className="saving">Saving…</span>
+          ) : (
+            <>
+              {m.state === "in_play" && clock && (timedOut ? "00:00" : `${formatRemaining(clock.remaining_ms)} left`)}
+              {m.state === "not_started" && `limit: ${m.time_limit_minutes} min`}
+              {m.state === "finished" && m.corrected_at && "corrected"}
+            </>
+          )}
         </span>
       </div>
       <PlayerLine e={m.a} m={m} />
@@ -63,22 +74,22 @@ export function MatchCard({ m, now, actions, expandable }: { m: MatchView; now: 
         <div className="actions" onClick={(e) => e.stopPropagation()}>
           {m.state === "not_started" && (
             <>
-              <button className="btn primary" onClick={() => actions.onStart(m)}>Start</button>
-              <button className="btn sm" onClick={() => actions.onSetLimit(m)}>Time limit ▾</button>
+              <button className="btn primary" disabled={disabled} onClick={() => actions.onStart(m)}>Start</button>
+              <button className="btn sm" disabled={disabled} onClick={() => actions.onSetLimit(m)}>Time limit ▾</button>
             </>
           )}
           {m.state === "in_play" && (
             <>
-              <button className="btn primary" onClick={() => actions.onComplete(m)}>Complete</button>
+              <button className="btn primary" disabled={disabled} onClick={() => actions.onComplete(m)}>Complete</button>
               <Link className="btn" href={`/admin/match/${m.id}`}>Timer ›</Link>
-              <button className="btn sm" title="Cancel start" onClick={() => actions.onCancelStart(m)}>⤺ Cancel start</button>
+              <button className="btn sm" disabled={disabled} title="Cancel start" onClick={() => actions.onCancelStart(m)}>⤺ Cancel start</button>
             </>
           )}
           {m.state === "finished" &&
             (m.correction_blocked ? (
               <span className="muted small">{m.correction_blocked}</span>
             ) : (
-              <button className="btn sm" onClick={() => actions.onCorrect(m)}>Correct result</button>
+              <button className="btn sm" disabled={disabled} onClick={() => actions.onCorrect(m)}>Correct result</button>
             ))}
         </div>
       )}

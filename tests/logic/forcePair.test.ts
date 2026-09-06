@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { forcePair } from "@/lib/logic/forcePair";
 import { closeBuybacks } from "@/lib/logic/buybacks";
-import { waitingEntries } from "@/lib/logic/derive";
-import { match, play, playRound, slotEntry, startNight } from "./helpers";
+import { halfFullPairs, waitingEntries } from "@/lib/logic/derive";
+import { entry, match, play, playRound, slotEntry, startNight } from "./helpers";
 
 const ratings = (n: number) => Array.from({ length: n }, (_, i) => 20 + i);
 
@@ -13,56 +13,49 @@ describe("Force Pair (rules 10, spec 5.5)", () => {
     expect(() => forcePair(s, ctx)).toThrow(/Needs 2 waiting players/);
   });
 
-  it("neither placed: both go into the lowest-numbered empty match", () => {
-    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(10), mode: "random_draw" });
-    play(s, ctx, 1, "a", "bought_back");
-    play(s, ctx, 2, "a", "bought_back");
+  it("two buy-backs alone in different matches: the lower match is kept and the other seat released", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(10) });
+    const a = play(s, ctx, 1, "a", "bought_back").loser.buybackEntryId!;
+    const b = play(s, ctx, 2, "a", "bought_back").loser.buybackEntryId!;
     const before = structuredClone(s.matches);
+    const lower = Math.min(entry(s, a).slot!, entry(s, b).slot!);
     const m = forcePair(s, ctx);
-    expect(m.number).toBe(6);
     expect(m.origin).toBe("force_pair");
-    expect([slotEntry(s, 11).id, slotEntry(s, 12).id]).toEqual([m.player_a_id, m.player_b_id]);
-    // Existing matches untouched, mode unchanged, window still open.
+    expect(m.number).toBe(Math.ceil(lower / 2));
+    expect([m.player_a_id, m.player_b_id].sort()).toEqual([a, b].sort());
+    expect(halfFullPairs(s)).toEqual([]);
+    // Existing matches untouched, window still open.
     expect(s.matches.filter((x) => x.id !== m.id)).toEqual(before);
-    expect(s.competition.buyback_mode).toBe("random_draw");
     expect(s.competition.buybacks_closed_at).toBeNull();
   });
 
-  it("one placed: the other takes that match's free slot", () => {
-    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(13), mode: "random_draw" });
-    const gus = slotEntry(s, 13);
-    const bb = play(s, ctx, 1, "a", "bought_back").loser.buybackEntryId!;
-    const m = forcePair(s, ctx);
-    expect(m.number).toBe(7);
-    expect(m.player_a_id).toBe(gus.id);
-    expect(m.player_b_id).toBe(bb);
-    expect(s.entries.find((e) => e.id === bb)!.slot).toBe(14);
-  });
-
-  it("both placed in different half-full matches: the lower match is used and the other slot released", () => {
-    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(13), mode: "sequential" });
+  it("a first-draw waiter and a buy-back in another match: the first-draw player's match (the lower) is used", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(13) });
     const gus = slotEntry(s, 13); // M7 half-full
     const bb = play(s, ctx, 1, "a", "bought_back").loser.buybackEntryId!; // placed at 15, M8 half-full
-    expect(s.entries.find((e) => e.id === bb)!.slot).toBe(15);
+    expect(entry(s, bb).slot).toBe(15);
     const m = forcePair(s, ctx);
     expect(m.number).toBe(7);
     expect(m.player_a_id).toBe(gus.id);
-    expect(s.entries.find((e) => e.id === bb)!.slot).toBe(14);
+    expect(entry(s, bb).slot).toBe(14);
     expect(s.entries.some((e) => e.slot === 15)).toBe(false);
   });
 
   it("may be pressed repeatedly and never breaks a match", () => {
-    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(10), mode: "random_draw" });
-    [1, 2, 3, 4].forEach((n) => play(s, ctx, n, "a", "bought_back"));
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(10) });
+    [1, 2, 3, 4].forEach((n) => play(s, ctx, n, "a", "bought_back")); // three alone in M6..M8, the fourth joins one
+    expect(waitingEntries(s, 1)).toHaveLength(2);
     forcePair(s, ctx);
-    forcePair(s, ctx);
-    expect(s.matches.filter((m) => m.origin === "force_pair").map((m) => m.number)).toEqual([6, 7]);
+    expect(s.matches.filter((m) => m.origin === "force_pair")).toHaveLength(1);
+    expect(s.matches.filter((m) => m.origin === "placement")).toHaveLength(1);
     expect(() => forcePair(s, ctx)).toThrow(/Needs 2/);
+    expect(s.matches.filter((m) => m.round === 1)).toHaveLength(7);
   });
 
-  it("is rejected from round two", () => {
+  it("is rejected once buy-backs are closed", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(8) });
     closeBuybacks(s, ctx);
+    expect(() => forcePair(s, ctx)).toThrow(/only available in round one/);
     playRound(s, ctx);
     expect(match(s, 9).round).toBe(2);
     expect(() => forcePair(s, ctx)).toThrow(/only available in round one/);

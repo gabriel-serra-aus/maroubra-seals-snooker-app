@@ -1,42 +1,104 @@
-// Advancing winners and drawing rounds two onwards (rules 4, 11; spec 5.4), and pulling a winner back
-// out of the next round (spec 5.7 step 1, 5.10 reset).
+// Advancing winners up the fixed bracket (rules 4, 11; spec 5.4, O-14) and pulling a winner back out of
+// later rounds (spec 5.7 step 1, 5.10 reset).
 
 import { conflict } from "./errors";
-import { currentRound, matchLabel, matchesOf, removeMatch, waitingEntries } from "./derive";
-import { createMatch, nextMatchNumber } from "./matches";
-import { shuffle } from "./random";
-import type { Ctx, MatchRow, Snapshot } from "./types";
+import {
+  entryAtSlot,
+  matchAtBox,
+  matchLabel,
+  matchNumberFor,
+  matchesOf,
+  mateSlot,
+  boxOf,
+  positionOf,
+  removeMatch,
+  roundsFor,
+  siblingHalf,
+} from "./derive";
+import { createMatch } from "./matches";
+import type { Ctx, EntryRow, FreePassRow, MatchRow, Snapshot } from "./types";
+
+export interface AdvanceResult {
+  matches: MatchRow[];
+  freePasses: FreePassRow[];
+  completed: boolean;
+}
+
+function grantPass(s: Snapshot, ctx: Ctx, e: EntryRow, fromRound: number): FreePassRow {
+  const fp: FreePassRow = { id: ctx.newId(), competition_id: s.competition.id, entry_id: e.id, from_round: fromRound, granted_at: ctx.now };
+  s.freePasses.push(fp);
+  return fp;
+}
 
 /**
- * After a match in `fromRound` is won: if the next round has already been drawn (only after a correction or
- * reset re-opened this match), the winner takes the vacated place beside whoever is waiting there.
- * Otherwise nothing to do — they join the pool when the round draw runs.
+ * The one automatic step of the night (spec 5.4). Every waiting player is pushed as far up the tree as
+ * their position allows, until nothing moves:
+ *
+ *  - Round r >= 2, box k = boxOf(slot, r). If someone is waiting in round r in the other half of the box,
+ *    the match (r, k) is created. Else, once buy-backs are closed, if nobody in that half can still reach
+ *    round r (the half is empty, or everyone there is out), the player receives a free pass from round r
+ *    and moves on. While buy-backs are open an empty half may still fill, so the player waits.
+ *  - Round 1, after close: a lone player whose seat-mate is missing or out goes through (O-4). Two
+ *    waiting seat-mates (a deleted match) are left for the organiser to re-pair.
+ *  - Beyond the final round: the competition is complete and this player is the winner.
  */
-export function advanceWinner(
-  s: Snapshot,
-  ctx: Ctx,
-  winnerId: string,
-  fromRound: number,
-  opts: { reuseNumber?: number; nextRoundDrawn?: boolean; inheritFreePass?: boolean } = {},
-): MatchRow | null {
-  const next = fromRound + 1;
-  // A deleted match can leave the next round empty; the caller then tells us it had been drawn.
-  if (!(opts.nextRoundDrawn ?? currentRound(s) >= next)) return null;
-  if (opts.inheritFreePass) {
-    // The previous winner held the next round's free pass (spec 5.7 step 2): the new winner takes it.
-    s.freePasses.push({ id: ctx.newId(), competition_id: s.competition.id, entry_id: winnerId, from_round: next, granted_at: ctx.now });
-    return null;
+export function advanceAll(s: Snapshot, ctx: Ctx): AdvanceResult {
+  const out: AdvanceResult = { matches: [], freePasses: [], completed: false };
+  const c = s.competition;
+  if (c.status !== "in_progress") return out;
+  const B = c.bracket_size;
+  const R = roundsFor(B);
+  const closed = c.buybacks_closed_at !== null;
+  const inHalf = (slot: number | null, half: [number, number]) => slot !== null && slot >= half[0] && slot <= half[1];
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const e of s.entries) {
+      const p = positionOf(s, e.id);
+      if (p.status !== "waiting" || e.slot === null) continue;
+      const r = p.round;
+      if (r > R) {
+        completeCompetition(s, ctx, e.id);
+        out.completed = true;
+        return out;
+      }
+      if (r === 1) {
+        if (!closed) continue;
+        const mate = entryAtSlot(s, mateSlot(e.slot));
+        if (mate && positionOf(s, mate.id).status === "waiting") continue;
+        out.freePasses.push(grantPass(s, ctx, e, 1));
+        changed = true;
+        continue;
+      }
+      const k = boxOf(e.slot, r);
+      if (matchAtBox(s, r, k)) continue;
+      const half = siblingHalf(e.slot, r);
+      const opponent = s.entries.find((x) => x.id !== e.id && inHalf(x.slot, half) && positionOf(s, x.id).status === "waiting" && positionOf(s, x.id).round === r);
+      if (opponent) {
+        const [a, b] = e.slot < opponent.slot! ? [e, opponent] : [opponent, e];
+        out.matches.push(createMatch(s, ctx, a.id, b.id, r, matchNumberFor(B, r, k), "advance"));
+        changed = true;
+        continue;
+      }
+      if (!closed) continue;
+      const alive = s.entries.some((x) => {
+        if (x.id === e.id || !inHalf(x.slot, half)) return false;
+        const q = positionOf(s, x.id);
+        return (q.status === "waiting" || q.status === "in_match") && q.round <= r;
+      });
+      if (alive) continue;
+      out.freePasses.push(grantPass(s, ctx, e, r));
+      changed = true;
+    }
   }
-  const waiting = waitingEntries(s, next).filter((e) => e.id !== winnerId);
-  if (waiting.length === 0) return null;
-  return createMatch(s, ctx, waiting[0].id, winnerId, next, opts.reuseNumber ?? nextMatchNumber(s), "correction");
+  return out;
 }
 
 /**
  * Removes an entry from every round after `fromRound`: deletes its not-started later matches (the opponent
  * returns to waiting) and its later free passes. A later match that has started blocks with 409 unless
  * `force` (master override), which resets that match first and unwinds beyond it.
- * Returns the match numbers deleted so a correction can reuse the vacated place.
  */
 export function unwindAdvance(
   s: Snapshot,
@@ -44,10 +106,9 @@ export function unwindAdvance(
   entryId: string,
   fromRound: number,
   opts: { force: boolean },
-): { deletedNumbers: number[]; unwound: string[]; freePassRounds: number[] } {
-  const deletedNumbers: number[] = [];
+): { deleted: MatchRow[]; unwound: string[] } {
+  const deleted: MatchRow[] = [];
   const unwound: string[] = [];
-  const freePassRounds = s.freePasses.filter((fp) => fp.entry_id === entryId && fp.from_round > fromRound).map((fp) => fp.from_round);
   const later = matchesOf(s, entryId)
     .filter((m) => m.round > fromRound)
     .sort((a, b) => b.round - a.round);
@@ -58,7 +119,7 @@ export function unwindAdvance(
       unwound.push(matchLabel(m));
     }
     removeMatch(s, m);
-    deletedNumbers.push(m.number);
+    deleted.push(m);
   }
   s.freePasses = s.freePasses.filter((fp) => !(fp.entry_id === entryId && fp.from_round > fromRound));
   if (s.competition.status === "complete" && s.competition.winner_entry_id === entryId) {
@@ -66,7 +127,7 @@ export function unwindAdvance(
     s.competition.winner_entry_id = null;
     s.competition.completed_at = null;
   }
-  return { deletedNumbers, unwound, freePassRounds };
+  return { deleted, unwound };
 }
 
 /** Any state → not_started, pulling the winner back out of later rounds (spec 5.10 reset). */
@@ -85,56 +146,22 @@ export function completeCompetition(s: Snapshot, ctx: Ctx, winnerId: string): vo
   s.competition.winner_entry_id = winnerId;
 }
 
-export interface RoundDrawResult {
-  round: number;
-  matches: MatchRow[];
-  freePass: string | null;
-  completed: boolean;
-}
+/** Where an entry stands after the automatics ran: the text for confirmations (spec 3.5). */
+export type Advancement =
+  | { kind: "match"; round: number; number: number }
+  | { kind: "awaiting"; round: number }
+  | { kind: "free_pass"; round: number }
+  | { kind: "winner" }
+  | { kind: "out" };
 
-/**
- * Round draw (spec 5.4). Runs after every write. When every match of the current round is finished, nobody
- * is left waiting in it (and, in round one, buy-backs are closed), the pool of winners plus free-pass
- * holders is shuffled and paired. An odd pool leaves one random free pass; a pool of one is the winner of
- * the night. In round one, anyone left without an opponent after the close (a correction or an override
- * can do that) goes through, per rules 11 / O-4. From round two a player an override left waiting blocks
- * the draw until they are paired or given a free pass on the override screen.
- */
-export function maybeDrawNextRound(s: Snapshot, ctx: Ctx): RoundDrawResult | null {
-  const c = s.competition;
-  if (c.status !== "in_progress") return null;
-  const r = currentRound(s);
-  const roundMatches = s.matches.filter((m) => m.round === r);
-  if (roundMatches.some((m) => m.state !== "finished")) return null;
-  if (r === 1 && c.buybacks_closed_at === null) return null;
-  const waiting = waitingEntries(s, r);
-  if (r === 1) {
-    for (const e of waiting) {
-      s.freePasses.push({ id: ctx.newId(), competition_id: c.id, entry_id: e.id, from_round: 1, granted_at: ctx.now });
-    }
-  } else if (waiting.length > 0) {
-    return null;
+export function advancementOf(s: Snapshot, entryId: string, fromRound: number): Advancement {
+  const p = positionOf(s, entryId);
+  if (p.status === "winner") return { kind: "winner" };
+  if (p.status === "out") return { kind: "out" };
+  if (p.status === "in_match") {
+    const m = s.matches.find((x) => x.id === p.matchId)!;
+    return { kind: "match", round: m.round, number: m.number };
   }
-  const pool = new Set<string>();
-  for (const m of roundMatches) if (m.winner_id) pool.add(m.winner_id);
-  for (const fp of s.freePasses) if (fp.from_round === r) pool.add(fp.entry_id);
-  if (pool.size === 0) return null;
-  if (pool.size === 1) {
-    const [winner] = pool;
-    completeCompetition(s, ctx, winner);
-    return { round: r, matches: [], freePass: null, completed: true };
-  }
-  const order = shuffle([...pool], ctx.rng);
-  const next = r + 1;
-  const matches: MatchRow[] = [];
-  let number = nextMatchNumber(s);
-  for (let i = 0; i + 1 < order.length; i += 2) {
-    matches.push(createMatch(s, ctx, order[i], order[i + 1], next, number++, "round_draw"));
-  }
-  let freePass: string | null = null;
-  if (order.length % 2 === 1) {
-    freePass = order[order.length - 1];
-    s.freePasses.push({ id: ctx.newId(), competition_id: c.id, entry_id: freePass, from_round: next, granted_at: ctx.now });
-  }
-  return { round: next, matches, freePass, completed: false };
+  if (p.round > fromRound + 1) return { kind: "free_pass", round: p.round };
+  return { kind: "awaiting", round: p.round };
 }

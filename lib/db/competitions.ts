@@ -2,7 +2,7 @@
 
 import type { Queryable } from "./client";
 import { conflict } from "@/lib/logic/errors";
-import type { BracketSize, BuybackMode, CompetitionRow } from "@/lib/logic/types";
+import type { BracketSize, CompetitionRow } from "@/lib/logic/types";
 
 export interface RatingSettings {
   rating_top_count: number;
@@ -30,7 +30,6 @@ export async function previousRatingSettings(q: Queryable): Promise<RatingSettin
 export interface NewCompetition {
   name: string;
   bracket_size: BracketSize;
-  buyback_mode: BuybackMode;
   default_time_limit_minutes: number;
   rating: RatingSettings;
 }
@@ -39,11 +38,11 @@ export async function createCompetition(q: Queryable, c: NewCompetition): Promis
   const live = await q.query("select 1 from competitions where status in ('setup', 'in_progress')", []);
   if (live.length) throw conflict("A competition is already set up or in progress — complete or abandon it first");
   const [row] = await q.query<CompetitionRow>(
-    `insert into competitions (name, bracket_size, buyback_mode, default_time_limit_minutes,
+    `insert into competitions (name, bracket_size, default_time_limit_minutes,
        rating_top_count, rating_top_delta, rating_bottom_count, rating_bottom_delta)
-     values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
+     values ($1, $2, $3, $4, $5, $6, $7) returning *`,
     [
-      c.name, c.bracket_size, c.buyback_mode, c.default_time_limit_minutes,
+      c.name, c.bracket_size, c.default_time_limit_minutes,
       c.rating.rating_top_count, c.rating.rating_top_delta, c.rating.rating_bottom_count, c.rating.rating_bottom_delta,
     ],
   );

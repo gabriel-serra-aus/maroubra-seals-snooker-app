@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addDrawEntry, startCompetition } from "@/lib/logic/competition";
-import { freeSlotOrder, halfFullPairs, openSlots } from "@/lib/logic/derive";
+import { halfFullPairs, openSlots, pickFreeSlot } from "@/lib/logic/derive";
+import { seededRng } from "@/lib/logic/random";
 import { makeCtx, setupNight, startNight } from "./helpers";
 
 const ratings = (n: number) => Array.from({ length: n }, (_, i) => 20 + i);
@@ -64,13 +65,24 @@ describe("round-one fill (rules 8.2, spec 5.1)", () => {
     expect(() => addDrawEntry(s, ctx, "late")).toThrow(/before the competition starts/);
   });
 
-  it("free-slot order for 13 of 16 is 15, 16, 14 (5.2)", () => {
+  it("placement picks the one empty match before the seat beside the lone first-draw player: 13 of 16 → slot 15 (5.2, O-13)", () => {
     const { s } = startNight({ bracket: 16, ratings: ratings(13) });
-    expect(freeSlotOrder(s)).toEqual([15, 16, 14]);
+    for (let seed = 1; seed <= 10; seed++) expect(pickFreeSlot(s, seededRng(seed))).toBe(15);
   });
 
-  it("free-slot order for 10 of 16 is 11..16", () => {
+  it("placement for 10 of 16 is a random empty match: the lower slot of M6, M7 or M8, and not always the same one", () => {
     const { s } = startNight({ bracket: 16, ratings: ratings(10) });
-    expect(freeSlotOrder(s)).toEqual([11, 12, 13, 14, 15, 16]);
+    const picks = new Set<number>();
+    for (let seed = 1; seed <= 20; seed++) {
+      const slot = pickFreeSlot(s, seededRng(seed))!;
+      expect([11, 13, 15]).toContain(slot);
+      picks.add(slot);
+    }
+    expect(picks.size).toBeGreaterThan(1);
+  });
+
+  it("a full bracket has nowhere to place", () => {
+    const { s } = startNight({ bracket: 16, ratings: ratings(16) });
+    expect(pickFreeSlot(s, seededRng(1))).toBeUndefined();
   });
 });

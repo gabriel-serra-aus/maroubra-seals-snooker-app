@@ -2,11 +2,11 @@
 
 | | |
 | --- | --- |
-| Status | Revision 2 — the twelve open questions (O-1 … O-12) have been answered by the organiser and are now specified, not guessed |
+| Status | Revision 3 — the fixed bracket, immediate placement, tree view, settings page and logo (O-13, O-14) on top of the twelve original rulings (O-1 … O-12) |
 | Date | 6 September 2026 |
 | Sources | [snooker-comp-rules.md](snooker-comp-rules.md) (behaviour; Part B §8–13 are the functional requirements), [tournament-app-plan.md](tournament-app-plan.md) (hosting and infrastructure) |
 
-Every requirement below is traced to a section of the rules document with a citation like **§10**. Part A sections (§1–7) are the player rules; Part B sections (§8–13) are the app specification. Where the two source documents were silent or said TBC, the organiser's ruling is recorded in [section 10, Decisions](#10-decisions), and the ruling's number (O-1 … O-12) is cited at the point it is implemented.
+Every requirement below is traced to a section of the rules document with a citation like **§10**. Part A sections (§1–7) are the player rules; Part B sections (§8–13) are the app specification. Where the two source documents were silent or said TBC, the organiser's ruling is recorded in [section 10, Decisions](#10-decisions), and the ruling's number (O-1 … O-14) is cited at the point it is implemented.
 
 **Several of those rulings changed the rules document itself, and it has been updated to match** — [10.2](#102-amendments-applied-to-the-rules-document) lists every edit. The three worth knowing before reading on:
 
@@ -14,6 +14,8 @@ Every requirement below is traced to a section of the rules document with a cita
 - **O-1** sets a configurable scale on top of that: the night's top X finishers move by Y and the bottom Z by W, defaulting to top 3 by −1 and bottom 3 by +2 — a good night brings your number down.
 - **O-4** allows **more than one round-one free pass**, replacing §11's "fills every possible round-one match before giving a free pass" (and matching §4).
 - **O-10 / O-11** move hosting from Vercel to **Netlify** and settle the database on **Supabase**.
+- **O-13** replaces the two buy-back modes with one placement rule: a buy-back goes straight into a **random empty match**, and once none is left beside a **random waiting player** (5.2).
+- **O-14** makes the bracket **fixed**: winners climb to the box above the moment their match finishes, free passes are what an empty half of the tree gives you, and the tree view draws it (5.4).
 
 **How to read this document.** Sections 1–4 are written for the organiser and describe what the app does, screen by screen. Sections 5–10 are written for the developer and describe how it works underneath. Both halves use the vocabulary from the rules document:
 
@@ -25,6 +27,7 @@ Every requirement below is traced to a section of the rules document with a cita
 | **Start** | The head start on points the weaker player — the one with the **higher** rating number — receives in a frame (§6) |
 | **Waiting player** | A player in the current round with no opponent yet (Part B definition) |
 | **Buy-back** | A round-one loser re-entering once for one more round-one match; also how a late arrival enters (§3) |
+| **Box** | One position of the fixed tree: box `k` of round `r` covers slots `(k−1)·2^r+1 .. k·2^r` and is fed by boxes `2k−1` and `2k` of the round below (5.4) |
 | **Free pass** | Advancing to the next round without playing (§4, §11) |
 | **Force Pair** | Organiser action that pairs two waiting players at random, round one only (§10) |
 | **Close Buy-Backs** | Organiser action that locks the player list for the night (§11) |
@@ -36,7 +39,7 @@ Every requirement below is traced to a section of the rules document with a cita
 
 ## 1. Overview
 
-The app runs one snooker competition on one night. Before the night, the organiser keeps a list of club players and their ratings (§13). On the night, the organiser picks the bracket size, ticks the players who have entered, chooses a buy-back mode and presses **Start Competition**; the app draws the round-one bracket at random (§8). From then on the organiser uses the admin page on the club phone to start each match, watch the 25-minute clock, enter the winner, and record whether a round-one loser buys back (§12). Winners advance automatically, buy-back players fill the empty bracket slots and are paired according to the chosen mode (§9), the organiser can Force Pair waiting players when a table is free (§10), and Close Buy-Backs when the night's entries are done (§11). Everyone else in the club watches the public bracket page on their own phone, which shows every match, its state and clock, and every player's rating and start (plan: "Public page"). The competition is single-elimination and finishes when one player is left.
+The app runs one snooker competition on one night. Before the night, the organiser keeps a list of club players and their ratings (§13). On the night, the organiser picks the bracket size, ticks the players who have entered and presses **Start Competition**; the app draws the round-one bracket at random (§8). From then on the organiser uses the admin page on the club phone to start each match, watch the 25-minute clock, enter the winner, and record whether a round-one loser buys back (§12). Winners climb a fixed bracket automatically (§4, §11), buy-back players go straight into a random empty match (§9), the organiser can Force Pair waiting players when a table is free (§10), and Close Buy-Backs when the night's entries are done (§11). Everyone else in the club watches the public bracket page on their own phone, which shows every match, its state and clock, and every player's rating and start (plan: "Public page"). The competition is single-elimination and finishes when one player is left.
 
 Nothing on the night is a one-way door. A match started by mistake can be un-started (O-5), a result can be corrected (§12), a whole competition can be abandoned (O-7), and the master override screen (3.9, O-5) can add or remove players and rebuild pairings at any point.
 
@@ -46,7 +49,7 @@ There are exactly two kinds of user (plan: "Admin Access").
 
 | Role | How they get in | What they can do |
 | --- | --- | --- |
-| **Organiser** | Types one of the club's **admin codes** on the login screen. If it matches, the app sets a browser cookie so the phone stays logged in (plan). | Everything: manage players and ratings, set up and start the competition, add buy-backs, start and complete matches, cancel a start, correct results, Force Pair, Close Buy-Backs, switch buy-back mode, master override, abandon the night, adjust ratings afterwards. |
+| **Organiser** | Types one of the club's **admin codes** on the login screen. If it matches, the app sets a browser cookie so the phone stays logged in (plan). | Everything: manage players and ratings, set up and start the competition, add buy-backs, start and complete matches, cancel a start, correct results, Force Pair, Close Buy-Backs, master override, abandon the night, adjust ratings afterwards, and change the time limit and rating scale on the settings page. |
 | **Public viewer** | Opens the public page. No login. | Read only: view the bracket, match states and clocks, players, ratings and starts. |
 
 Rules that follow from the plan, the project constraints and the organiser's rulings:
@@ -73,6 +76,9 @@ Screen list:
 | 3.7 | End-of-night rating review | Organiser | `/admin/ratings` |
 | 3.8 | Public bracket | Everyone | `/` |
 | 3.9 | Master override | Organiser | `/admin/override` |
+| 3.10 | Settings | Organiser | `/admin/settings` (linked from the bottom of 3.3, not from the top bar) |
+
+The club badge (`assets/club-logo-source.png`, served in three sizes from `public/` and `app/icon.png`) is the browser icon, sits above the title on 3.1 and 3.8, and at the left of the admin top bar.
 
 ### 3.1 Admin login
 
@@ -169,17 +175,8 @@ Shown when no competition is in progress. Implements §8.1–8.2.
 │ Name        [ Friday 11 Sep 2026   ] │
 │                                      │
 │ Bracket size    (•) 16     ( ) 32    │
-│                                      │
-│ Buy-back mode                        │
-│   (•) Random Draw (default)          │
-│   ( ) Sequential Pairing             │
-│                                      │
-│ Match time limit   [ 25 ] minutes    │
-│                                      │
-│ Rating adjustment (applied on 3.7    │
-│ after the night)                     │
-│   Top    [ 3 ] finishers  [ -1 ] ea. │
-│   Bottom [ 3 ] finishers  [ +2 ] ea. │
+│ Time limit 25 min · top 3 by −1,     │
+│ bottom 3 by +2          Change ›     │
 │                                      │
 │ Entered players       13 of 16       │
 │ ┌──────────────────────────────────┐ │
@@ -199,32 +196,30 @@ Shown when no competition is in progress. Implements §8.1–8.2.
 └──────────────────────────────────────┘
 ```
 
-**Data shown:** competition name, bracket size, buy-back mode, default match time limit (§12: "default is 25 minutes, configurable for the whole competition"), the four rating-adjustment settings (O-1), the **active** player list with a tick per entered player, and a live summary line.
+**Data shown:** competition name, bracket size, a one-line reminder of the time limit and rating scale with a link to 3.10, the **active** player list with a tick per entered player, and a live summary line.
 
 **Actions:**
 
 | Action | What happens |
 | --- | --- |
 | Bracket size | Choose 16 or 32 (§8.1). Disabled if more players are ticked than the chosen size allows. |
-| Buy-back mode | Choose Random Draw or Sequential Pairing (§9). Random Draw is the default. Can also be switched later during round one (3.4). |
-| Match time limit | Sets the default for every match tonight. Individual matches can override it before they start (§12). |
-| Rating adjustment | Four numbers, carried over from the previous competition and editable here (O-1): how many of the night's best finishers are adjusted and by how much, and the same for the night's earliest losers. Defaults: top **3** by **−1**, bottom **3** by **+2**. They are snapshotted onto the competition, so changing them next week does not rewrite last week's review. |
+| Change › / Settings › | Opens 3.10, where the match time limit and the rating scale live. They are deliberately off this screen so the night's setup is two decisions: size and players. |
 | Tick / untick a player | Adds or removes them from tonight's entry list. The summary line updates: number of matches, whether there is a waiting player, and how many slots are left open. |
 | New player | Opens the add-player sheet from 3.2 and ticks the new player. |
-| **Start Competition** | Confirms ("Start with 13 players in a 16 bracket? The bracket size cannot be changed afterwards."). Then the app shuffles the entered players, fills the round-one bracket top to bottom with no gaps, leaves the remaining slots open for buy-backs and late arrivals, and makes any odd player out a waiting player (§8.2). The organiser lands on 3.4. |
+| **Start Competition** | Confirms ("Start with 13 players in a 16 bracket? The bracket size cannot be changed afterwards."). Then the app shuffles the entered players, fills the round-one bracket top to bottom with no gaps, leaves the remaining slots open for buy-backs and late arrivals, and makes any odd player out a waiting player (§8.2). Each player's slot fixes their place in the whole tree (5.4). The organiser lands on 3.4. |
 
 After Start: the bracket size is locked (§8.1) and players can only be added as buy-backs (§8.3) — or through the master override (3.9), which is the deliberate escape hatch. The setup screen is not reachable again until the competition is complete or abandoned.
 
 ### 3.4 Admin bracket and match control
 
-The main screen for the night. It lists every match in the current round with its state colour, the waiting players, and the round-one controls.
+The main screen for the night. It lists every match with its state colour, the players awaiting an opponent, and the round-one controls, with a **List | Tree** switch at the top: the list is where matches are run; the tree is the whole night drawn as a fixed bracket (5.4), read only, scrolling sideways on a phone. The choice is remembered on the phone.
 
 ```
 ┌──────────────────────────────────────┐
-│ Friday 11 Sep · Round 1   Gabriel ▾  │
-│ Buy-backs OPEN · Random Draw         │
+│ Friday 11 Sep · Round 1  [List|Tree] │
+│ Buy-backs OPEN      Open slots: 2/16 │
 │ [ Close Buy-Backs ]  [ Force Pair ]  │
-│ Mode: Random Draw  [ Switch mode ]   │
+│ [ + Add buy-back / late arrival ]    │
 ├──────────────────────────────────────┤
 │ M1  ● IN PLAY             18:42 left │
 │     Alice Chen (45)  starts on 17    │
@@ -246,40 +241,43 @@ The main screen for the night. It lists every match in the current round with it
 │     Ida Roy (36)     level, no start │
 │     [ Complete ]  [ Timer ›]  [ ⤺ ]  │
 ├──────────────────────────────────────┤
-│ M8  ○ AWAITING OPPONENT   slot 16    │
+│ M8  ○ AWAITING OPPONENT   slot 15    │
 │     Fay Ng (41)      buy-back #1     │
 ├──────────────────────────────────────┤
-│ Waiting players (2)                  │
+│ M7  ○ AWAITING OPPONENT   slot 13    │
 │     Gus Ray (25)     first draw      │
-│     Fay Ng (41)      buy-back #1     │
+├──────────────────────────────────────┤
 │ Open slots: 2 of 16                  │
-│ [ + Add buy-back / late arrival ]    │
 ├──────────────────────────────────────┤
 │ Players & ratings ›   Public page ›  │
 │ Master override ›     Abandon night  │
 └──────────────────────────────────────┘
 ```
 
-`⤺` is **Cancel start** (O-5). A half-full round-one slot pair is shown as **AWAITING OPPONENT** so the organiser can see where the next buy-back will land (5.2).
+`⤺` is **Cancel start** (O-5). A box holding one player is shown as **AWAITING OPPONENT** in every round: in round one it is a half-full slot pair, from round two a winner whose opponent's match is still going (5.4).
 
-From round two onwards the header changes and the round-one controls disappear (§10, §11):
+**Tapping a button locks the card.** The card the organiser acted on fades and shows "Saving…" in place of its clock, and every other button on the page is disabled, until the server answers; the reply carries the new bracket, so the screen updates without a second request. A double tap cannot start or complete a match twice.
+
+Rounds overlap: M9 (the winners of M1 and M2) can be in play while M7 has not started, so the list shows every round that has anything in it, newest first, with finished rounds collapsed. Once buy-backs close the round-one controls disappear (§10, §11):
 
 ```
-│ Friday 11 Sep · Round 2              │
-│ Buy-backs closed · 9 players         │
-│ Free passes: Gus Ray (25),           │
-│              Fay Ng (41)             │
+│ Friday 11 Sep · Round 1  [List|Tree] │
+│ Buy-backs closed                     │
 ├──────────────────────────────────────┤
+│ ── Round 2 ─────────────────────────  │
+│ Free passes to round 3: Gus Ray (25) │
 │ M9  ○ NOT STARTED                    │
+│ M11 ○ AWAITING OPPONENT              │
+│     Eve Long (28)                    │
+│ ── Round 1 ─────────────────────────  │
 │ …                                    │
 ```
 
 **Data shown:**
 
-- Competition name, current round, the signed-in organiser (O-8), whether buy-backs are open or closed, and the current buy-back mode (round one only).
+- Competition name, the lowest round still being played, the signed-in organiser (O-8), and whether buy-backs are open or closed (round one).
 - Every match of the current round: number, state and colour (§12), both players with ratings, the weaker player's start (§13, 5.6), the countdown while in play, a timed-out warning at zero (§12), the winner tick and the loser's buy-back decision when finished.
-- Round-one slot pairs holding one player, marked **awaiting opponent** with their slot number (5.2).
-- Waiting players with how they entered (first draw or buy-back) and, for buy-backs, their order of re-entry (used by Sequential Pairing, §9).
+- Boxes holding one player, marked **awaiting opponent**, with the slot number in round one (5.2, 5.4). There is no separate waiting list: everyone is placed the moment they enter (O-13).
 - Open slots remaining out of the bracket size (§8.2, O-3).
 - **All** free-pass holders for the round — round one can have more than one (§4, O-4).
 - Earlier rounds are collapsed below the current round and can be expanded.
@@ -294,18 +292,18 @@ From round two onwards the header changes and the round-one controls disappear (
 | **Complete** | Match is in play | Opens the complete dialog (3.5). A result cannot be entered on a match that has not started (§12). |
 | **⤺ Cancel start** | Match is in play | Confirms ("Cancel the start of M1? The clock is discarded and the match goes back to not started."). Returns the match to `not_started`, clears `started_at` and the frozen limit, and writes an audit row. For the wrong match having been started (O-5). The two players, the ratings and the start are untouched. |
 | **Correct result** | Match is finished and the winner's next match has not started | Opens the correct dialog (3.5). The corrected winner is pulled back out of the next round (§12). If the winner's next match has started, the button is replaced by "Result locked: next match started" — and the master override (3.9) is the way through if it really has to change. |
-| **Force Pair** | Round one, two or more waiting players | Picks two waiting players at random and creates a not-started match between them, whichever way they entered (§10). With fewer than two waiting players the button is disabled and shows "Needs 2 waiting players". It never touches an existing match. Hidden from round two (§10). |
-| **Close Buy-Backs** | Round one, buy-backs open | Confirms, naming the consequence: "Close buy-backs? No more entries tonight. 2 players have no opponent and will go straight to round 2." Locks the player list, places any unplaced waiting players per 5.3, and gives a free pass to **every** player still without an opponent (O-4). The header changes to "Buy-backs closed". |
-| **Switch mode** | Round one, buy-backs open | Switches between Random Draw and Sequential Pairing (§9: "can be switched at any time during round one"). Switching to Sequential immediately places waiting players in re-entry order. Switching to Random leaves existing matches alone; players who are still waiting wait for the close. |
-| **Add buy-back / late arrival** | Round one, buy-backs open, at least one open slot | Picks an active player from the club list (or adds a new one) and enters them as a buy-back player (§3: "A player who arrives after the draw can enter as a buy-back player"; §8.3). They take one open slot and become a waiting player, then are placed per the mode. |
+| **Force Pair** | Buy-backs open, two or more players alone in round one | Picks two waiting players at random and creates a not-started match between them, whichever way they entered (§10). With fewer than two waiting players the button is disabled and shows "Needs 2 waiting players". It never touches an existing match. Hidden once buy-backs close (§10). |
+| **Close Buy-Backs** | Buy-backs open | Confirms, naming the consequence: "Close buy-backs? No more entries tonight. 2 players have no opponent and will go straight to round 2." Locks the player list and gives a free pass to **every** round-one player still without an opponent (O-4); the tree then moves on (5.3, 5.4). The header changes to "Buy-backs closed". |
+| **List \| Tree** | Always | Switches between the match list and the tree drawing. Actions live on the list. |
+| **Add buy-back / late arrival** | Buy-backs open, at least one open slot | Picks an active player from the club list (or adds a new one) and enters them as a buy-back player (§3: "A player who arrives after the draw can enter as a buy-back player"; §8.3). They take one open slot and go straight into the bracket per 5.2: the reply says "Placed into M8, awaiting an opponent" or "Placed into M7 v Gus Ray". |
 | **Master override ›** | Any time | Opens 3.9. |
 | **Abandon night** | Competition in progress | Confirms ("Abandon Friday 11 Sep? Every match and result tonight is kept but the night is closed and a new competition can be set up.") Sets the competition to `abandoned` (O-7) and returns to setup. |
 
 Automatic behaviour on this screen (no button):
 
 - Buy-backs **close automatically** once every round-one loser has bought back or been marked Declined (§11). A banner says "Buy-backs closed automatically".
-- When all round-one matches are finished and buy-backs are closed, the app **draws round two** from the winners and all free-pass holders and the screen moves to round two (§11). Later rounds follow the same way.
-- When the last match of the final round is completed, the screen shows the winner and a link to the rating review (3.7).
+- Every result **moves its winner up the tree at once** (§11, 5.4): into the next match if the player on the other side is ready, otherwise into that box as *awaiting opponent*. Once buy-backs are closed, a player whose other side is empty gets a free pass and keeps climbing. The Complete dialog's reply says which: "Alice Chen goes to M9", "Alice Chen waits in round 2 for an opponent", "Alice Chen has a free pass to round 3".
+- When the final is completed, the screen shows the winner and a link to the rating review (3.7).
 
 ### 3.5 Complete match / correct result
 
@@ -335,7 +333,7 @@ The buy-back section only appears for a round-one match where the loser has not 
 
 | Action | What happens |
 | --- | --- |
-| Save result | The match turns red, the clock stops, and the winner is advanced automatically (§12). A loser who buys back takes an open slot and becomes a waiting player, then is placed per the mode (§9, 5.2). A loser who declines is out. If this was the last undecided round-one loser, buy-backs close automatically (§11). |
+| Save result | The match turns red, the clock stops, and the winner is advanced automatically up the tree (§12, 5.4). A loser who buys back takes an open slot and goes straight into the bracket (§9, 5.2). A loser who declines is out. If this was the last undecided round-one loser, buy-backs close automatically (§11). The reply says where the winner and the buy-back went. |
 | Cancel | Nothing changes; the match stays in play. |
 
 **Correct result** uses the same dialog with the title "Correct M1" and the current result pre-selected. Saving replaces the result: the previous winner is removed from the next round and the new winner takes their place (§12). What happens to the previous loser's buy-back is set out in 5.7: if that buy-back match has already started, the correction is refused (O-6 — "it should not happen"), and the master override (3.9) is the only way through.
@@ -437,9 +435,9 @@ Read-only. Anyone can view brackets, players and handicaps (plan: "Public page")
 
 ```
 ┌──────────────────────────────────────┐
-│ Maroubra Seals Snooker               │
+│ (badge)  Maroubra Seals Snooker      │
 │ Friday 11 Sep 2026 · Round 1         │
-│ Buy-backs open · Random Draw         │
+│ Buy-backs open · 2 slots [List|Tree] │
 │                                      │
 │ ── Round 1 ─────────────────────────  │
 │ ● Alice Chen 45 (+17) v Bob Smith 20 │
@@ -451,11 +449,8 @@ Read-only. Anyone can view brackets, players and handicaps (plan: "Public page")
 │ ● Hal Ito 36 v Ida Roy 36            │
 │   in play · ⚠ timed out              │
 │ ○ Fay Ng 41 · awaiting opponent      │
-│ Waiting: Gus Ray, Fay Ng (buy-back)  │
+│ ○ Gus Ray 25 · awaiting opponent     │
 │ Open slots: 2                        │
-│                                      │
-│ ── Round 2 ─────────────────────────  │
-│   Drawn when round 1 is finished.    │
 │                                      │
 │ ── Players & ratings ───────────────  │
 │   Alice Chen 45 · Bob Smith 20 · …   │
@@ -464,9 +459,9 @@ Read-only. Anyone can view brackets, players and handicaps (plan: "Public page")
 └──────────────────────────────────────┘
 ```
 
-**Data shown:** the same match list as 3.4 (state colour, players, ratings, start, countdown, timed-out warning, winner, buy-back decision), slot pairs awaiting an opponent, waiting players, open slots, all free-pass holders, the round structure for the whole night, and the **active** player list with ratings. When no competition is running it shows the player list and "No competition tonight yet". An abandoned competition is not shown at all.
+**Data shown:** the same match list as 3.4 (state colour, players, ratings, start, countdown, timed-out warning, winner, buy-back decision), boxes awaiting an opponent, open slots, all free-pass holders, the round structure for the whole night, and the **active** player list with ratings — or, with the switch on **Tree**, the whole bracket drawn as on paper (5.4): every box of every round, connectors between them, the winner at the right, empty boxes dashed, free passes marked. When no competition is running it shows the player list and "No competition tonight yet". An abandoned competition is not shown at all.
 
-**Actions:** none that change anything. Tapping a match expands it to show the start time and limit. "Organiser login" goes to 3.1.
+**Actions:** none that change anything. Tapping a match expands it to show the start time and limit; List | Tree is remembered on the phone. "Organiser login" goes to 3.1.
 
 ### 3.9 Master override
 
@@ -524,6 +519,26 @@ The escape hatch (O-5). Everything the normal screens refuse to do is possible h
 
 The override screen refuses only one thing: it will not leave the competition in a state the app cannot render — a match with one player is fine (it becomes a slot awaiting an opponent), a match with the same player twice is not.
 
+### 3.10 Settings
+
+The two things that rarely change, kept off the setup screen so the night's setup is size and players only (organiser's request, revision 3).
+
+```
+┌──────────────────────────────────────┐
+│ Settings                             │
+│ Applies to Friday 11 Sep 2026.       │
+│ Match time limit   [ 25 ] minutes    │
+│ Rating adjustment (applied on 3.7)   │
+│   Top    [ 3 ] finishers  [ -1 ] ea. │
+│   Bottom [ 3 ] finishers  [ +2 ] ea. │
+│ [ Save ]                             │
+└──────────────────────────────────────┘
+```
+
+**Data shown:** the live competition's default match time limit (§12) and the four rating-adjustment numbers (O-1). With no competition set up it says so and links to 3.3: a new night starts with the previous night's values (7.4), so there is nothing to edit until one exists.
+
+**Actions:** Save writes through `PATCH /api/admin/competitions/{id}`. The time limit can change any time before the night is complete and affects matches not yet started; the rating scale is locked once the night has started (7.4). Reached from "Settings ›" at the bottom of 3.3, 3.4 and 3.9; not in the top bar.
+
 ## 4. Match and tournament state machine
 
 ### 4.1 Match states (§12)
@@ -555,7 +570,7 @@ Transitions:
 | `not_started` | `in_play` | Organiser presses **Start** | Match has two players. | `started_at` set to now on the server. Time limit frozen for this match. |
 | `in_play` | `not_started` | Organiser presses **Cancel start** (O-5) | Match is `in_play`. | `started_at` and the frozen limit cleared. Audit row written. No result is involved, so nothing else changes. |
 | `in_play` | `in_play` (timed out) | Clock reaches zero | — | Voice alert "Match timed out" on the organiser's device; warning shown everywhere. No data change. |
-| `in_play` | `finished` | Organiser presses **Complete** and saves | Winner chosen. Round one: loser's buy-back decision chosen (unless they have already bought back, buy-backs are closed, or no open slot remains). | Winner recorded, `finished_at` set. Winner advanced automatically. Loser: buy back (becomes waiting player, takes a slot, placed per mode) or declined/out. May trigger auto-close (§11) and, if this was the last match of the round, the next round draw (5.4). |
+| `in_play` | `finished` | Organiser presses **Complete** and saves | Winner chosen. Round one: loser's buy-back decision chosen (unless they have already bought back, buy-backs are closed, or no open slot remains). | Winner recorded, `finished_at` set. Winner advanced up the tree (5.4). Loser: buy back (takes a slot, placed at once per 5.2) or declined/out. May trigger auto-close (§11) and any free passes and matches that follow from it (5.3, 5.4). |
 | `finished` | `finished` (new result) | Organiser presses **Correct result** and saves | The previous winner's next-round match has not started (§12), and the previous loser's buy-back match has not started (O-6). | Previous winner removed from the next round; new winner advanced. Details in 5.7. |
 | any | `not_started` | Master override **Reset** (O-5) | None. | Result, winner and clock cleared; next round unwound as far as it can be. Audit row written. |
 
@@ -565,25 +580,22 @@ A result still cannot be entered on a `not_started` match (§12), and the server
 
 | State | Meaning | Organiser can |
 | --- | --- | --- |
-| `setup` | Players ticked, size, mode and rating scale chosen, nothing drawn. | Change anything on 3.3. |
-| `in_progress`, round one, buy-backs open | Round one under way, entries still accepted. | Start/Complete/Cancel/Correct matches, add buy-backs, Force Pair, switch mode, Close Buy-Backs, override, abandon. |
-| `in_progress`, round one, buy-backs closed | Round one under way, player list locked. | Start/Complete/Cancel/Correct matches, override, abandon. |
-| `in_progress`, round 2, 3, … | Drawn from the players who advanced. No buy-backs, no Force Pair (§11). | Start/Complete/Cancel/Correct matches, override, abandon. |
+| `setup` | Players ticked, size chosen (rating scale and time limit on 3.10), nothing drawn. | Change anything on 3.3 and 3.10. |
+| `in_progress`, buy-backs open | Round one under way, entries still accepted. Later-round matches form as their feeders finish, so rounds overlap. | Start/Complete/Cancel/Correct matches, add buy-backs, Force Pair, Close Buy-Backs, override, abandon. |
+| `in_progress`, buy-backs closed | Player list locked. Winners climb the fixed bracket; empty halves give free passes (5.4). No buy-backs, no Force Pair (§11). | Start/Complete/Cancel/Correct matches, override, abandon. |
 | `complete` | One player left. | Review ratings (3.7). Start a new competition next week. |
 | `abandoned` | The night was called off (O-7). | Nothing. The row is kept for the record; a new competition can be set up straight away. |
 
 ```
- setup ──Start Competition (§8)──► in_progress, round 1, buy-backs open
-                                       │
+ setup ──Start Competition (§8)──► in_progress, buy-backs open
+                                       │  every result moves its winner up the tree;
+                                       │  a round-two match forms when both feeders are done
                  Close Buy-Backs, or auto-close (§11)
                                        ▼
-                            round 1, buy-backs closed
-                                       │
-                 all round-one matches finished (§11) → round 2 drawn
-                                       ▼
-                                 round 2, 3, …
-                                       │  all matches finished → next round drawn
-                                       │  … until one player remains
+                            in_progress, buy-backs closed
+                                       │  free passes for every lone player (O-4) and for
+                                       │  every empty half of the tree (O-14), then climb …
+                                       │  … until the final is won
                                        ▼
                                    complete
 
@@ -597,7 +609,7 @@ Reversal rules, after the O-5 and O-7 rulings:
 - **A mistaken draw** is handled by Abandon (O-7) and setting the night up again, or by rebuilding the pairings on 3.9.
 - **Buy-backs closed** cannot be reopened on the normal screens (§3: "Once the organiser closes the buy-back window, no more entries for the night"), but the master override can reopen them (O-5).
 - **Round advancement** is reversed through Correct result, and only while the affected winner's next match is not started (§12). Correcting a match can therefore dissolve a not-started next-round match (5.7). Past that point it is the master override's job.
-- Round two and later are drawn automatically the moment the previous round's last match is finished. A correction to that last match re-draws the affected pairing rather than the whole round (5.7).
+- There is no round draw to reverse: a winner's next match exists only because of their result, so correcting the result deletes that match (if not started) and the new winner takes the same box (5.7).
 
 ---
 
@@ -635,43 +647,30 @@ Worked fills:
 
 **Slot capacity is the hard cap on buy-backs, first come first served** (O-3). Every buy-back, whether a round-one loser or a late arrival, consumes one open slot at the moment it is recorded. A full bracket (16 of 16) therefore accepts no buy-backs at all, and a 13-player 16-bracket accepts three. Requests are granted in the order they are recorded; when `open_slots` reaches zero the "Buys back" option is disabled and any further loser is out (3.5). The organiser who expects buy-backs chooses the bracket size accordingly, or grows the bracket on 3.9.
 
-### 5.2 Where a buy-back goes: slot placement (§3, §8.2, §9, O-4)
+### 5.2 Where a buy-back goes: placement on entry (§3, §8.2, §9, O-13)
 
-A buy-back player is created when a round-one loser chooses "Buys back" on Complete, or when a late arrival is added. Buying back is always the player's choice and is available **once** per player (§3, O-4). In both cases the player consumes an open slot and becomes a waiting player with a `buyback_seq` (1, 2, 3, … in order of re-entry).
+A buy-back player is created when a round-one loser chooses "Buys back" on Complete, or when a late arrival is added. Buying back is always the player's choice and is available **once** per player (§3, O-4). In both cases the player consumes an open slot, gets a `buyback_seq` (1, 2, 3, … in order of re-entry), and is **placed into a slot in the same transaction** — there is no unplaced state and no waiting list (O-13).
 
-**The free-slot order.** When a waiting player is placed into the bracket, they take the first free slot in this order:
+**The placement rule** (`pickFreeSlot`, random with the injected source):
 
-1. **Free slots whose match holds no first-draw player**, ascending by slot number.
-2. Then **all other free slots**, ascending by slot number.
+1. While any **empty match** remains (both slots of a pair free), a random one; the player takes its lower slot and shows as *awaiting opponent*.
+2. Otherwise a random **free seat beside a player who is waiting in round one**, first-draw or buy-back alike. The match is created at once.
 
-In plain words: buy-backs fill the empty matches first, two at a time, and only once those are used up does a buy-back go into the slot beside a first-draw player who is still waiting (O-4). That ordering is also what §3 asks for — buy-back players meeting each other in round one — and it falls out of one rule instead of two.
+A seat beside a player who is not waiting (a free-pass holder after close) is not free — filling it would pair someone who has already advanced. If nothing is free the entry is refused ("No free slot in the bracket"), which the O-3 slot cap already prevents in normal play.
 
-A match row is created the moment the second slot of a pair is filled.
-
-**Worked example, 16 bracket, 13 first-draw players.** After the draw: M1–M6 full, M7 half-full (Gus Ray in slot 13), M8 empty. Free slots in order: **15, 16, 14**.
+**Worked example, 16 bracket, 13 first-draw players.** After the draw: M1–M6 full, M7 half-full (Gus Ray in slot 13), M8 empty.
 
 | Event | Slot taken | Result |
 | --- | --- | --- |
-| Buy-back #1 (Fay Ng) | 15 | M8 half-full, Fay waiting, "awaiting opponent" |
-| Buy-back #2 (Ivan Poe) | 16 | **M8 created**: Fay v Ivan — two buy-backs, per §3 |
-| Buy-back #3 (Jo Kerr) | 14 | **M7 created**: Gus v Jo — the first-draw waiter finally gets an opponent |
+| Buy-back #1 (Fay Ng) | 15 | M8 is the only empty match. Fay waits there, "awaiting opponent" |
+| Buy-back #2 (Ivan Poe) | 14 or 16, at random | **M7 created** (Gus v Ivan) or **M8 created** (Fay v Ivan) |
+| Buy-back #3 (Jo Kerr) | the remaining seat | The other match is created |
 
 `open_slots` goes 3 → 2 → 1 → 0, and the bracket ends with 8 matches and no free pass.
 
-**Worked example, 16 bracket, 10 first-draw players.** M1–M5 full, M6–M8 empty, no half-full match. Free slots in order: 11, 12, 13, 14, 15, 16. Buy-backs pair up as they arrive: #1+#2 make M6, #3+#4 make M7, #5+#6 make M8.
+**Worked example, 16 bracket, 10 first-draw players.** M1–M5 full, M6–M8 empty. Buy-backs #1, #2 and #3 each take a **different** empty match, in random order, and each waits alone; #4 sits down beside one of them at random and that match forms. This is the organiser's worked example (O-13): a buy-back takes an empty match even while another player is waiting alone, and only when nothing is empty does it pair with a random lone player.
 
-**When placement happens** depends on the mode (§9):
-
-| Mode | When a waiting player is placed | Effect |
-| --- | --- | --- |
-| **Random Draw** (default) | Not on entry. Buy-backs hold their reserved slot count but no slot number, and stay unplaced until **Close Buy-Backs** (5.3) or **Force Pair** (5.5). | Fairest: the whole set is shuffled once, in one go. Tables can sit idle while the window is open, which is what §9 warns about. |
-| **Sequential Pairing** | Immediately, at the moment the player enters. | A match forms as soon as the second slot of a pair fills, which is normally on every second buy-back. Keeps tables busy (§9). |
-
-**Mode switch during round one** (§9: "can be switched at any time during round one"):
-
-- Random → Sequential: place the currently waiting players immediately, in `buyback_seq` order (a first-draw waiting player is already in their slot from the draw and is not moved).
-- Sequential → Random: nothing happens now. Existing matches are untouched (§10 principle: never break an existing match). New buy-backs accumulate unplaced until close.
-- The switch is not offered after buy-backs close, and not in round two or later.
+**Force Pair** (5.5) is the organiser's tool for pairing two lone players sooner than the rule would.
 
 ### 5.3 Close Buy-Backs and round-one free passes (§11, O-4)
 
@@ -680,40 +679,48 @@ A match row is created the moment the second slot of a pair is filled.
 **Effect, in one transaction:**
 
 1. Set `buybacks_closed_at`. No more entries can be added and no Complete may record "Buys back" from now on (§3).
-2. Place every unplaced waiting player into the free-slot order of 5.2 — shuffled (Random Draw) or in `buyback_seq` order (Sequential, where normally nobody is left). Matches are created wherever a pair completes.
-3. **Every player still without an opponent receives a free pass to round two** (O-4). There may be more than one, which is what §4 allows ("Round one can [have] one or more free passes").
+2. Run the advancement step (5.4). Its round-one rule gives **every player still without an opponent a free pass to round two** (O-4) — there may be several — and then everything above moves as far as it can: two pass-holders whose boxes feed the same round-two box meet there at once; a pass-holder whose other side is empty passes again.
 
-Point 3 is the organiser's ruling in O-4 and it **replaces** §11's "fills every possible round-one match before giving a free pass. Only a player with no possible opponent gets one." The two leftovers of a 16-bracket are not paired with each other at close; they both go through.
+Point 2's first half is the organiser's ruling in O-4 and it **replaces** §11's old "fills every possible round-one match before giving a free pass." The two leftovers of a 16-bracket are not paired with each other in round one at close; they both go through — and if they happen to feed the same round-two box (M7 and M8 do), they meet there.
 
-Worked, 16 bracket, 13 first-draw players, Random Draw:
+Worked, 16 bracket, 13 first-draw players:
 
-| Buy-backs taken at close | Placement | Free passes |
+| Buy-backs taken before the close | Round one at close | Free passes | What follows |
+| --- | --- | --- | --- |
+| 3 | M8 and M7 both created | none | — |
+| 2 | one of M7/M8 created, one lone player | 1 | the lone player waits in round two for the other match's winner |
+| 1 | Gus Ray alone in M7, the buy-back alone in M8 | **2** | both feed box 4 of round two: **M12 is created at once**, Gus v the buy-back |
+| 0 | Gus alone in M7, M8 empty | 1 | M8 is empty, so Gus passes round two as well and waits in M14 |
+
+The one-buy-back row is the case the organiser described: two matches each holding a single player, and both players go to round two. If the organiser would rather they played each other *in round one*, **Force Pair** before closing does exactly that (5.5).
+
+### 5.4 The fixed bracket: advancing up the tree (§4, §11, O-14)
+
+The bracket is a fixed single-elimination tree and every player's place in it follows from their round-one `slot`:
+
+- Rounds run `1 .. log2(B)`: four for a 16 bracket, five for 32. The final is the last round, box 1.
+- **Box** `k` of round `r` covers slots `(k−1)·2^r + 1 .. k·2^r` and is fed by boxes `2k−1` and `2k` of round `r−1`. A player in slot `s` sits in box `⌈s / 2^r⌉` of round `r`. The two halves of a box are the slots of its two feeders; a player's opponent must come from the *other* half.
+- **Match numbers are positional**: box `k` of round `r` is `M(B − B/2^(r−1) + k)`. For 16: M1–M8, M9–M12, M13–M14, M15. For 32: M1–M16, M17–M24, M25–M28, M29–M30, M31. Growing 16 → 32 renumbers later rounds by this formula (5.10).
+
+**Advancement is progressive, not per round.** After every write — a result, a placement, a close, an override — one automatic step (`advanceAll`) pushes every waiting player as far up the tree as their position allows, and repeats until nothing moves:
+
+| Waiting in | Condition | Effect |
 | --- | --- | --- |
-| 3 | 15, 16, 14 → M8 and M7 both created | none |
-| 2 | 15, 16 → M8 created | 1: Gus Ray, alone in M7 |
-| 1 | 15 → nothing completes | **2: Gus Ray in M7, the buy-back in M8** |
-| 0 | — | 1: Gus Ray |
+| round `r ≥ 2`, box `k` | someone is waiting in round `r` in the other half of the box | **match `(r, k)` is created**, `not_started`, lower slot as player A, origin `advance` |
+| round `r ≥ 2`, box `k` | buy-backs closed, and nobody in the other half can still reach round `r` (it is empty, or everyone there is out) | **free pass from round `r`**; the player is now waiting in round `r+1` and the step runs again for them |
+| round `r ≥ 2`, box `k` | otherwise (a feeder match is still to be played, or the half is empty but buy-backs are still open) | waits in the box as *awaiting opponent* |
+| round 1, after close | seat-mate missing or out | free pass from round one (O-4). Two waiting seat-mates (a deleted match) are left for the organiser |
+| beyond the final round | — | the competition is **complete** and this player is the winner |
 
-The one-buy-back row is the case the organiser described: two matches each holding a single player, and both players go to round two. If the organiser would rather they played each other, **Force Pair** before closing does exactly that (5.5) — the manual action exists for this, which is why the automatic rule does not need to.
+While buy-backs are open nothing skips a round: an empty half may still fill with a buy-back, so a winner whose other side is empty waits. The moment the window closes those waits resolve.
 
-### 5.4 Advancing to round two and later rounds (§11, §4)
+**Consequences worth knowing** (recorded in rules §4):
 
-**Round two is drawn** automatically when `buybacks_closed_at` is set, no unplaced waiting player remains, and every round-one match is `finished`. The pool is every round-one winner plus **all** round-one free-pass holders (§11, O-4).
+- A round-two match is ready as soon as both matches feeding it are done, while the rest of round one is still going. Rounds overlap; the screens show every round with anything in it.
+- A round can hold **more than one free pass**, and the same player can receive several in a row. With 9 players in a 16 bracket and no buy-backs, the player in slot 9 passes rounds one, two and three and plays only the final. Buy-backs filling random empty matches make this rare; the 13-player night with three buy-backs is a perfect eight with no free pass at all.
+- With 8 players in a 16 bracket the top half decides the night: M13's winner passes the empty bottom half and is champion. The tree draws that honestly.
 
-**Later rounds** are drawn from the players who advanced from the previous round (§11), using the same procedure, with no buy-backs and no Force Pair.
-
-Procedure for round `r ≥ 2` with pool size `P`:
-
-1. Shuffle the pool.
-2. Pair players `1–2, 3–4, …` into `⌊P/2⌋` matches, `not_started`.
-3. If `P` is odd, the one unpaired player receives a free pass to round `r+1` (§4: "one player drawn at random advances without playing"). Because the pool was shuffled, the leftover is random.
-4. If `P = 1`, the competition is `complete` and that player is the winner of the night.
-
-Rounds two onwards have no slots, so the multiple-free-pass rule of 5.3 does not apply there: **at most one free pass per round from round two on**. Pairings are random, not by fixed bracket position, which is the only workable reading once buy-back winners join round two and free passes change the count (O-4).
-
-**A player left waiting after the round's matches are finished.** This cannot happen in normal play; a correction (5.7) or the master override (5.10) can cause it. In round one, once buy-backs are closed, anyone still without an opponent when the last match finishes goes through on a free pass, exactly as at the close (§11, O-4). From round two onwards the draw waits: the admin bracket names the waiting player and the organiser pairs them or grants a free pass on 3.9. The draw runs as soon as nobody is left waiting.
-
-Round numbering for match labels: round-one matches are `M1..M{B/2}` by slot pair; later rounds continue from `B/2 + 1` in creation order.
+**A player left waiting when nothing can resolve them** cannot happen after close in normal play, because an empty half gives a pass. A correction (5.7) or an override (5.10) that leaves two seat-mates waiting in round one is the one case, and it is the organiser's to pair.
 
 ### 5.5 Force Pair (§10)
 
@@ -721,7 +728,7 @@ Preconditions, checked on the server:
 
 | Check | Failure response |
 | --- | --- |
-| Competition is in round one | 409 "Force Pair is only available in round one" (the button is hidden from round two) |
+| Buy-backs are open | 409 "Force Pair is only available in round one, while buy-backs are open" (the button is hidden after the close) |
 | At least two waiting players | 409 "Needs 2 waiting players" (no-op) |
 
 Effect: choose two waiting players uniformly at random (any mix of first-draw and buy-back, placed or unplaced), and create one `not_started` round-one match between them.
@@ -730,7 +737,7 @@ Effect: choose two waiting players uniformly at random (any mix of first-draw an
 - If both occupy slots in different half-full matches, the lower-numbered match is used and the other player's slot is released back to the free-slot order.
 - If neither is placed, both go into the lowest-numbered empty match.
 
-Nothing else changes: existing matches are never modified (§10), the mode setting is not changed, buy-backs remain open, and `open_slots` is unchanged because the players had already consumed their slots. Force Pair may be pressed repeatedly.
+Nothing else changes: existing matches are never modified (§10), buy-backs remain open, and `open_slots` is unchanged because the players had already consumed their slots. Force Pair may be pressed repeatedly, and is refused once buy-backs close (there is nobody left waiting in round one by then).
 
 ### 5.6 Handicap start (§6, §13)
 
@@ -773,8 +780,8 @@ Allowed while the recorded winner's next match is `not_started` or does not yet 
 
 Effect of saving a corrected result on match `M` (round `r`) in one transaction:
 
-1. **Previous winner `W`** is pulled back: if `W` is in a `not_started` round `r+1` match, that match is deleted and its other player becomes a waiting player in round `r+1`; if `W` holds a round `r+1` free pass, the free pass is removed. If round `r+1` has not been drawn yet, nothing to undo.
-2. **New winner `W′`** is advanced exactly as a fresh Complete would: if round `r+1` has not been drawn, they simply join the pool; if it has, they take `W`'s former place (paired with the player left waiting in step 1, or given the free pass `W` held). This keeps the correction local rather than re-drawing the whole round.
+1. **Previous winner `W`** is pulled back out of every later round: their `not_started` later matches are deleted (the other player returns to waiting in that box) and their later free passes removed. If `W` had not gone anywhere yet, nothing to undo.
+2. **New winner `W′`** is advanced exactly as a fresh Complete would, by the automatic step of 5.4: they take the same box, so they meet the player left waiting in step 1, or receive the free pass `W` held. The correction is local by construction — the tree has only one place for the winner of `M`.
 3. **Round one only, previous loser `W′`'s buy-back**: if `W′` had bought back and their buy-back match is `not_started`, that match is deleted, the buy-back entry and its slot are released, their opponent returns to waiting, and `W′` is now simply the winner. If `W′`'s buy-back match is `in_play` or `finished`, the correction is **rejected** with 409 "Loser's buy-back match already started" (O-6: this should not happen; if it has, the master override on 3.9 is the way through, and it will say what it is about to unwind).
 4. **New loser `W` in round one** must record buy back or decline in the correction dialog, subject to the same slot and closed-window checks as Complete (O-3).
 5. `finished_at` is left as is; a `corrected_at` timestamp is set for the audit trail.
@@ -821,15 +828,15 @@ The override actions in 3.9 are the same pure functions the normal routes use, c
 
 | Override | Reuses | Extra behaviour |
 | --- | --- | --- |
-| Reset a match | 5.8 (cancel start) and 5.7 step 1 (pull the winner back) | Works from `finished` as well as `in_play`. Unwinds forward one round only; if the next round's match has already started, it unwinds that too, and says so in the confirmation. |
-| Delete a match | — | Both entries return to waiting in that round. In round one they keep their slots, so the pair shows as two waiting players who can be re-paired by Force Pair or "Pair two waiting players"; a slot is only released when its player is removed. |
-| Remove a player | 5.7 | Their not-started matches are deleted and finished matches they **won** are voided, unwinding the winner's later place; a finished match they **lost** stays as history (and so does that entry row). Refuses, naming the match, if one of theirs is in play or a later match has started. |
-| Pair two waiting players | 5.5 (Force Pair placement) | No randomness and no round-one restriction. |
-| Add a player to the night | 5.2 (placement) | Ignores `open_slots`, `buybacks_closed_at` and the one-buy-back rule. Grows the bracket to 32 first if 16 is full. |
-| Replace a player in a match | 5.6 | Recomputes `start_points`, `start_entry_id` and both rating snapshots. |
-| Grant / revoke a free pass | 5.4 | Direct write to `free_passes`. |
-| Reopen buy-backs | — | Clears `buybacks_closed_at`. |
-| Grow bracket | 5.1 | `bracket_size` 16 → 32 only; slots 17–32 become open slots. |
+| Reset a match | 5.8 (cancel start) and 5.7 step 1 (pull the winner back) | Works from `finished` as well as `in_play`. Unwinds every later match and pass of the winner; if a later match has already started, it resets that too, and says so in the confirmation. |
+| Delete a match | — | **Round one only.** Both entries return to waiting and keep their slots, so the pair shows as two waiting players who can be re-paired by Force Pair or "Pair two waiting players". From round two the tree has exactly one place for those two players, so the automatic step would put the match straight back — Reset or Replace a player are the tools there; the route answers 409. |
+| Remove a player | 5.7 | Their not-started matches are deleted and finished matches they **won** are voided, unwinding the winner's later place; a finished match they **lost** stays as history (and so does that entry row). Refuses, naming the match, if one of theirs is in play or a later match has started. The automatic step then runs: a seat-mate left alone after close goes through. |
+| Pair two waiting players | 5.5 (Force Pair placement) | No randomness. In round one any two waiting players; from round two both must be waiting in the **same box** (409 otherwise). |
+| Add a player to the night | 5.2 (placement) | Ignores `open_slots`, `buybacks_closed_at` and the one-buy-back rule. Takes the lowest **open place**: an empty round-one slot not under a box already decided (a free pass through it, or a match created in it); grows the bracket to 32 first if none is left; 409 if a 32 bracket has none. The automatic step then climbs them until they meet someone. |
+| Replace a player in a match | 5.6 | Recomputes `start_points`, `start_entry_id` and both rating snapshots. In round one the two players swap slots; from round two the newcomer must be waiting in the match's box. |
+| Grant / revoke a free pass | 5.4 | Direct write to `free_passes`, then the automatic step (grant). A revoke is refused once the holder is in a later match. |
+| Reopen buy-backs | — | Clears `buybacks_closed_at` **and takes back what the close caused**: every free pass, and the not-started matches their holders reached through them. Refuses, naming the match, if one of those has started. |
+| Grow bracket | 5.1, 5.4 | `bracket_size` 16 → 32; slots 17–32 become open slots and later-round matches are renumbered by position (M9 becomes M17). |
 | Abandon (O-7) | — | 5.11. |
 
 Every override writes an `admin_actions` row: the organiser's name from the session (O-8), the action, and a JSON snapshot of what changed. That log is what makes the escape hatch safe to hand to a club phone.
@@ -861,17 +868,17 @@ The client reads `started_at` and the server's `now` in the same response and of
 Per CLAUDE.md, these are the minimum unit tests over `lib/`:
 
 - Round-one fill with 16 and 32 for full, even, and odd counts; open-slot arithmetic; half-full and empty match identification (5.1).
-- The free-slot order: empty matches before the slot beside a first-draw player, both worked examples in 5.2, and the §3 property that buy-backs meet buy-backs while an empty match remains.
+- Placement (O-13): the one empty match before the seat beside the lone first-draw player (13 of 16 → slot 15); a random empty match, not always the same one (10 of 16); three buy-backs take three different empty matches and the fourth joins one; the organiser's 5-player example; a full bracket has nowhere to place (5.2).
 - Buy-back capacity: the cap is the open-slot count, granted first come first served, and "Buys back" is refused at zero (5.1, O-3).
-- Close with 3, 2, 1 and 0 buy-backs on a 13-of-16 bracket produces 0, 1, **2** and 1 free passes respectively (5.3, O-4) — the two-free-pass case is the one that would regress to the old §11 behaviour.
-- Rounds two onward never produce more than one free pass (5.4).
-- Random Draw places everything at close; Sequential places on entry; both directions of mid-round switch (5.2).
-- Force Pair: no-op under two waiting players, never touches existing matches, rejected in round two, and correct slot choice for each of the three placement cases (5.5).
+- Close with 3, 2, 1 and 0 buy-backs on a 13-of-16 bracket produces 0, 1, **2** and 1 free passes respectively (5.3, O-4), and with 1 the two pass-holders meet in M12 at once.
+- The tree (O-14): positional numbering for 16 and 32; a round-two match forms while round one is still going; nobody skips a round while buy-backs are open; a dead half gives an immediate pass after close and cascades (9 players: slot 9 reaches the final unplayed); 13 players and 3 buy-backs make a perfect eight ending in M15; 4 players in a 32 bracket pass through the empty rounds to the title (5.4).
+- Force Pair: no-op under two waiting players, never touches existing matches, rejected after close, and the right slot for each placement case (5.5).
 - Handicap start: the §6 example (45 v 20 → 17) and the whole table in 5.6, including that the start goes to the **higher** number, and the three negative-rating rows (`20 v −5`, `−2 v −8`, `0 v 12`) — subtracting a negative is where this goes wrong.
-- Correction pulling a winner out of a not-started next-round match and out of a free pass; rejection when the loser's buy-back match has started (5.7, O-6).
+- Correction pulling a winner out of a not-started next-round match (the other player waits in the box until the new winner arrives) and out of a free pass (which the new winner receives); rejection when the loser's buy-back match has started (5.7, O-6).
 - Cancel start clears the clock and leaves the pairing intact, and the match can be started again (5.8).
 - Rating adjustment: finishing order for a 16-player night with buy-backs, the default top-3/bottom-3 groups, no player in both groups, a winner whose handicap crosses zero into negative, clamping at −100 and 200, and idempotence on a second save (5.9).
-- Auto-close condition (5.3), round draw trigger (5.4), and abandon freeing the `in_progress` slot (5.11).
+- Overrides: delete refused from round two, pair needs the same box, add takes an open place and climbs, grow renumbers M9 → M17, reopen takes the close's passes back and refuses once a match reached through one has started (5.10).
+- Auto-close condition (5.3) and abandon freeing the `in_progress` slot (5.11).
 
 ## 6. Data model
 
@@ -879,8 +886,8 @@ Supabase Postgres. The plan file left the model "TBC"; **this is the model** (O-
 
 Two shapes here are worth reading before the tables:
 
-- **A slot is an entry.** One row in `entries` occupies one round-one slot. A player who buys back gets a **second** entry row linked to their first, so `open_slots = bracket_size − count(entries)` is a plain count with no special cases (O-3).
-- **A match row exists only when both of its slots are filled.** A slot pair holding one player is not a match; it is what the screens call "awaiting opponent" (5.2). This is what makes multiple round-one free passes fall out naturally at close (O-4).
+- **A slot is an entry, and the slot is the player's place in the whole tree.** One row in `entries` occupies one round-one slot; box `⌈slot / 2^r⌉` is where that player plays in round `r` (5.4, O-14). A player who buys back gets a **second** entry row linked to their first, so `open_slots = bracket_size − count(entries)` is a plain count with no special cases (O-3).
+- **A match row exists only when both of its players are known.** A box holding one player is not a match; it is what the screens call "awaiting opponent" (5.2, 5.4). This is what makes multiple free passes fall out naturally (O-4, O-14).
 
 ### 6.1 ER diagram
 
@@ -904,13 +911,12 @@ In words: a **player** is a permanent club member with a rating history, active 
 ```sql
 create type match_state as enum ('not_started', 'in_play', 'finished');
 create type competition_status as enum ('setup', 'in_progress', 'complete', 'abandoned');
-create type buyback_mode as enum ('random_draw', 'sequential');
 create type entry_source as enum ('draw', 'buyback');
 create type buyback_decision as enum ('bought_back', 'declined', 'no_slots');
-create type match_origin as enum ('draw', 'sequential', 'force_pair', 'close', 'round_draw', 'correction', 'override');
+create type match_origin as enum ('draw', 'placement', 'force_pair', 'close', 'advance', 'correction', 'override');
 ```
 
-`abandoned` is O-7. `no_slots` records a loser who wanted to buy back but found the bracket full (O-3), so the auto-close check can tell them apart from a decline. Round-one open/closed is derived from `competitions.buybacks_closed_at`, and the current round from the highest `matches.round`, so `competition_status` stays small.
+`abandoned` is O-7. `no_slots` records a loser who wanted to buy back but found the bracket full (O-3), so the auto-close check can tell them apart from a decline. Round-one open/closed is derived from `competitions.buybacks_closed_at`, and the current round from the lowest round with anything unfinished, so `competition_status` stays small. `placement` is a buy-back sitting down beside a lone player; `advance` is a match the tree formed from two winners. Migration `0002_fixed_bracket.sql` dropped the `buyback_mode` type and column and renamed the two origins.
 
 ### 6.3 Tables
 
@@ -949,7 +955,6 @@ There is no delete route and no `on delete cascade` anywhere pointing at this ta
 | name | text | not null |
 | status | competition_status | not null, default `'setup'` |
 | bracket_size | smallint | not null, `check (bracket_size in (16, 32))` |
-| buyback_mode | buyback_mode | not null, default `'random_draw'` |
 | default_time_limit_minutes | smallint | not null, default 25, `check (between 1 and 180)` |
 | rating_top_count | smallint | not null, default 3, `check (>= 0)` (O-1) |
 | rating_top_delta | smallint | not null, default **−1** (O-1) |
@@ -974,30 +979,30 @@ The four rating columns are snapshotted from the previous competition when a new
 | competition_id | uuid | FK → competitions, not null |
 | player_id | uuid | FK → players, not null |
 | source | entry_source | not null |
-| slot | smallint | **nullable**, `check (slot between 1 and 32)`; unique `(competition_id, slot)` |
+| slot | smallint | nullable in the schema, **always set once the night has started**; `check (slot between 1 and 32)`; unique `(competition_id, slot)`. Fixes the player's box in every round (5.4) |
 | buyback_seq | integer | nullable, set on a buy-back entry in order of re-entry; unique `(competition_id, buyback_seq)` |
 | rebuy_of_entry_id | uuid | FK → entries, nullable, unique; set when this buy-back entry is a round-one loser re-entering (null for a late arrival) |
 | buyback_decision | buyback_decision | nullable; set on a **first-draw** entry when it loses in round one |
 | rating_at_entry | integer | not null, snapshot of the player's rating at entry time |
-| joined_round | smallint | not null, default 1; the round the entry joined in. 1 for the draw and every buy-back; higher only when the master override adds a player after round one (3.9), so they are a waiting player in that round rather than in round one |
+| joined_round | smallint | not null, default 1. Always 1 now: an override-added player takes a round-one slot and climbs with free passes (5.10). Kept for history |
 | entered_at | timestamptz | not null, default now() |
 
 Constraints and consequences:
 
 - Unique `(competition_id, player_id, source)`. A player therefore has at most two entries in a night — one `draw`, one `buyback` — which is §3's "buy back **once**" enforced by the schema (O-4).
 - `check (source = 'buyback' or (buyback_seq is null and rebuy_of_entry_id is null))`.
-- `slot` is null between the moment a buy-back is recorded and the moment it is placed (5.2). Under Sequential Pairing that gap is a single transaction; under Random Draw it lasts until Close Buy-Backs.
+- `slot` is null only before Start. A buy-back is placed in the same transaction that records it (5.2, O-13).
 - **Open slots** are `bracket_size − count(entries in the competition)`. Because a buy-back is its own row, this is the whole of the O-3 cap: the insert is rejected inside the transaction if it would take the count past `bracket_size`.
-- Derived per-entry status (not stored): *waiting* if it is in the current round with no match and no free pass; *in match*; *advanced*; *out*.
+- Derived per-entry status (not stored): *waiting* in round `r` (reached `r` through wins and passes, no match there yet); *in match*; *out*; *winner*.
 
-**matches** — a row exists only when both slots of a round-one pair are filled (5.1).
+**matches** — a row exists only when both players of a box are known (5.1, 5.4).
 
 | Column | Type | Constraints |
 | --- | --- | --- |
 | id | uuid | PK |
 | competition_id | uuid | FK → competitions, not null |
 | round | smallint | not null, `check (round >= 1)` |
-| number | smallint | not null; unique `(competition_id, number)`; round one uses the slot-pair index, later rounds continue from `bracket_size / 2 + 1`; display label `M{number}` |
+| number | smallint | not null; unique `(competition_id, number)`, deferrable so a grow can renumber; positional: box `k` of round `r` is `B − B/2^(r−1) + k` (5.4); display label `M{number}` |
 | player_a_id | uuid | FK → entries, not null |
 | player_b_id | uuid | FK → entries, not null, `check (player_a_id <> player_b_id)` |
 | rating_a | integer | not null, snapshot |
@@ -1017,7 +1022,7 @@ Indexes: `(competition_id, round)`, `(competition_id, state)`.
 
 The `started_at` check is what makes Cancel start (5.8) a two-column write: set `state = 'not_started'` and `started_at = null` together, or the constraint rejects it.
 
-**free_passes** — round one may hold several (O-4); rounds two onwards at most one.
+**free_passes** — any round may hold several (O-4, O-14): one per box whose other half is empty.
 
 | Column | Type | Constraints |
 | --- | --- | --- |
@@ -1027,7 +1032,7 @@ The `started_at` check is what makes Cancel start (5.8) a two-column write: set 
 | from_round | smallint | not null; the round in which the player had no opponent |
 | granted_at | timestamptz | not null, default now() |
 
-Unique `(competition_id, entry_id, from_round)`. There is deliberately **no** unique index on `(competition_id, from_round)`: round one can produce more than one row, which is the O-4 ruling, and a database constraint that forbade it would be the old §11 rule smuggled back in.
+Unique `(competition_id, entry_id, from_round)`. There is deliberately **no** unique index on `(competition_id, from_round)`: a round can produce more than one row, which is the O-4 and O-14 rulings, and a database constraint that forbade it would be the old §11 rule smuggled back in.
 
 **admin_actions** — the audit trail behind Cancel start, Abandon and every master override (O-5, O-7, O-8).
 
@@ -1071,7 +1076,7 @@ Verifying a cookie means splitting off the name, looking it up in `ADMIN_CODES`,
 
 | Method + route | Input | Returns | Admin cookie |
 | --- | --- | --- | --- |
-| `GET /api/public/bracket` | — | The current (or most recent non-abandoned) competition: status, round, mode, `buybacks_closed_at`, open slots, all matches with players, ratings, start, state, `started_at`, `time_limit_minutes`, winner; slot pairs awaiting an opponent; waiting players; all free passes; and `server_now`. `Cache-Control: s-maxage=5, stale-while-revalidate=10`. | No |
+| `GET /api/public/bracket` | — | The current (or most recent non-abandoned) competition: status, current round, `rounds_total`, `buybacks_closed_at`, open slots, and for every round its matches (players, ratings, start, state, `started_at`, `time_limit_minutes`, winner), the boxes awaiting an opponent, all free passes, and `boxes` — every box of the round for the tree view (match, lone player, pass-through, or empty); the winner; and `server_now`. `Cache-Control: s-maxage=5, stale-while-revalidate=10`. | No |
 | `GET /api/public/players` | — | All **active** players with ratings. | No |
 
 The admin bracket screen calls the same bracket payload via `GET /api/admin/bracket` (cookie required, uncached) so the organiser is never behind the CDN.
@@ -1091,17 +1096,17 @@ The admin bracket screen calls the same bracket payload via `GET /api/admin/brac
 
 | Method + route | Input | Validation | Admin cookie |
 | --- | --- | --- | --- |
-| `POST /api/admin/competitions` | `{ name, bracket_size, buyback_mode, default_time_limit_minutes, rating_* }` | No other competition `setup` or `in_progress`; size ∈ {16, 32}; mode valid; limit 1–180; rating counts ≥ 0. Rating settings default from the previous competition. Creates in `setup`. | Yes |
-| `PATCH /api/admin/competitions/{id}` | any of `{ name, bracket_size, buyback_mode, default_time_limit_minutes, rating_* }` | `bracket_size` and `rating_*` only while `setup`. `buyback_mode` while `setup`, or while round one with buy-backs open (§9); switching runs 5.2. `default_time_limit_minutes` any time before `complete`; affects matches not yet started. | Yes |
-| `POST /api/admin/competitions/{id}/entries` | `{ player_id }` or `{ new_player: { name, rating } }` | Player must be active (O-9). `setup`: adds a first-draw entry; total ≤ `bracket_size`. `in_progress` round one with buy-backs open: adds a late arrival as a `buyback` entry (§3, §8.3), requires an open slot (O-3), assigns `buyback_seq`, runs the mode placement. Otherwise `409`. | Yes |
+| `POST /api/admin/competitions` | `{ name, bracket_size, default_time_limit_minutes?, rating_*? }` | No other competition `setup` or `in_progress`; size ∈ {16, 32}; limit 1–180; rating counts ≥ 0. Time limit and rating settings default from the previous competition (3.10). Creates in `setup`. | Yes |
+| `PATCH /api/admin/competitions/{id}` | any of `{ name, bracket_size, default_time_limit_minutes, rating_* }` | `bracket_size` and `rating_*` only while `setup`. `default_time_limit_minutes` any time before `complete`; affects matches not yet started. This is what 3.3 and 3.10 call. | Yes |
+| `POST /api/admin/competitions/{id}/entries` | `{ player_id }` or `{ new_player: { name, rating } }` | Player must be active (O-9). `setup`: adds a first-draw entry; total ≤ `bracket_size`. `in_progress` with buy-backs open: adds a late arrival as a `buyback` entry (§3, §8.3), requires an open slot (O-3), assigns `buyback_seq`, places them at once (5.2); the reply carries `match_number` or `awaiting_in`. Otherwise `409`. | Yes |
 | `DELETE /api/admin/competitions/{id}/entries/{entry_id}` | — | Only while `setup`. Removing a player from a running night is an override (7.7). | Yes |
 | `POST /api/admin/competitions/{id}/start` | — | `setup`; `2 ≤ entries ≤ bracket_size`. Runs 5.1 in a transaction: snapshots ratings, assigns slots, creates matches with starts, sets `started_at`, `status = in_progress`. | Yes |
-| `POST /api/admin/competitions/{id}/force-pair` | — | Round one only; ≥ 2 waiting players; else `409`. Runs 5.5. | Yes |
-| `POST /api/admin/competitions/{id}/close-buybacks` | `{ dry_run? }` | Round one, buy-backs open; else `409`. Runs 5.3. Response reports how many free passes were granted and to whom, so the screen can show it; `{ dry_run: true }` returns the same answer without writing, which is what the confirmation on 3.4 uses. | Yes |
+| `POST /api/admin/competitions/{id}/force-pair` | — | Buy-backs open; ≥ 2 waiting players; else `409`. Runs 5.5. | Yes |
+| `POST /api/admin/competitions/{id}/close-buybacks` | `{ dry_run? }` | Buy-backs open; else `409`. Runs 5.3. Response reports how many round-one free passes were granted and to whom, and which matches the cascade created, so the screen can show it; `{ dry_run: true }` returns the same answer without writing, which is what the confirmation on 3.4 uses. | Yes |
 | `POST /api/admin/competitions/{id}/abandon` | — | `setup` or `in_progress`; else `409`. Runs 5.11 and writes an `admin_actions` row (O-7). | Yes |
 | `GET /api/admin/bracket` | — | Same payload as the public bracket, uncached. | Yes |
 
-Automatic transitions (auto-close, round draw, completion) are not routes. They run inside the `complete`, `correct`, `close-buybacks`, `entries` and override handlers after the primary write, in the same transaction.
+Automatic transitions (auto-close, advancement up the tree, completion) are not routes. They run inside the `complete`, `correct`, `close-buybacks`, `entries` and override handlers after the primary write, in the same transaction. Every mutating route returns the fresh `bracket` payload, and the screens use it directly instead of fetching again (one round trip per tap).
 
 ### 7.5 Matches (§12)
 
@@ -1110,7 +1115,7 @@ Automatic transitions (auto-close, round draw, completion) are not routes. They 
 | `PATCH /api/admin/matches/{id}` | `{ time_limit_minutes }` | Match `not_started`; 1–180 or `null` to revert to the competition default. | Yes |
 | `POST /api/admin/matches/{id}/start` | `{ time_limit_minutes? }` | Match `not_started` (`409` otherwise). Sets `started_at = now()`, freezes the limit, `state = in_play`. | Yes |
 | `POST /api/admin/matches/{id}/cancel-start` | — | Match `in_play` (`409` otherwise). Runs 5.8: clears `started_at` and the frozen limit, `state = not_started`, writes an `admin_actions` row (O-5). | Yes |
-| `POST /api/admin/matches/{id}/complete` | `{ winner_entry_id, loser_decision? }` | Match `in_play` (`409` if `not_started`, per §12, or already `finished`). Winner must be a player of the match. Round one and loser eligible and buy-backs open: `loser_decision` required, ∈ {`bought_back`, `declined`}; `bought_back` requires an open slot or the server records `no_slots` and returns the reason (O-3). Round two onwards, or loser ineligible, or buy-backs closed: `loser_decision` must be absent. Then: `state = finished`, `finished_at`, `winner_id`; advance winner; apply decision; run mode placement (5.2); check auto-close (5.3); check round draw (5.4); check completion. | Yes |
+| `POST /api/admin/matches/{id}/complete` | `{ winner_entry_id, loser_decision? }` | Match `in_play` (`409` if `not_started`, per §12, or already `finished`). Winner must be a player of the match. Round one and loser eligible and buy-backs open: `loser_decision` required, ∈ {`bought_back`, `declined`}; `bought_back` requires an open slot or the server records `no_slots` and returns the reason (O-3). Round two onwards, or loser ineligible, or buy-backs closed: `loser_decision` must be absent. Then: `state = finished`, `finished_at`, `winner_id`; apply the decision and place a buy-back (5.2); check auto-close (5.3); run advancement (5.4), which also detects completion. The reply's `winner_to` says where the winner went: `match` (with `match_number`), `awaiting`, `free_pass` (with `round`) or `winner`. | Yes |
 | `POST /api/admin/matches/{id}/correct` | `{ winner_entry_id, loser_decision? }` | Match `finished`; guards in 5.7 — `409` if the winner's next match has started, or if the loser's buy-back match has started (O-6). Same decision rules as complete. Runs 5.7 and sets `corrected_at`. | Yes |
 
 ### 7.6 Master override (O-5)
@@ -1119,16 +1124,16 @@ Every route here is a normal admin route with the state guards removed, and ever
 
 | Method + route | Input | What it does |
 | --- | --- | --- |
-| `POST /api/admin/competitions/{id}/override/entries` | `{ player_id }` | Adds a player at any point in the night, ignoring open slots, the closed window and the one-buy-back rule. Grows the bracket first if needed. |
+| `POST /api/admin/competitions/{id}/override/entries` | `{ player_id }` or `{ new_player }` | Adds a player at any point in the night into the lowest open place of the tree, ignoring open slots, the closed window and the one-buy-back rule. Grows the bracket first if needed; `409` if a 32 bracket has no open place. |
 | `DELETE /api/admin/competitions/{id}/override/entries/{entry_id}` | — | Removes a player and cascades per 5.10. `409` naming the match if the cascade cannot complete. |
 | `POST /api/admin/matches/{id}/override/replace-player` | `{ slot: "a" \| "b", entry_id }` | Swaps a player in; recomputes the start (5.6). |
 | `POST /api/admin/matches/{id}/override/reset` | — | Any state → `not_started`, unwinding the next round (5.10). |
-| `DELETE /api/admin/matches/{id}/override` | — | Deletes the match; both entries return to waiting; round-one slots released. |
-| `POST /api/admin/competitions/{id}/override/pair` | `{ entry_id_a, entry_id_b }` | Creates a match between two chosen waiting players in the current round. |
+| `DELETE /api/admin/matches/{id}/override` | — | Round one only: deletes the match; both entries return to waiting and keep their slots. `409` from round two. |
+| `POST /api/admin/competitions/{id}/override/pair` | `{ entry_id_a, entry_id_b }` | Creates a match between two chosen waiting players in the same round — and, from round two, the same box. |
 | `POST /api/admin/competitions/{id}/override/free-pass` | `{ entry_id, from_round }` | Grants a free pass. |
 | `DELETE /api/admin/competitions/{id}/override/free-pass/{id}` | — | Revokes one. |
-| `POST /api/admin/competitions/{id}/override/reopen-buybacks` | — | Clears `buybacks_closed_at`. |
-| `POST /api/admin/competitions/{id}/override/grow-bracket` | — | `bracket_size` 16 → 32. `409` on a 32 bracket. |
+| `POST /api/admin/competitions/{id}/override/reopen-buybacks` | — | Clears `buybacks_closed_at` and takes back every free pass and the not-started matches reached through them; `409` naming a match that has started. |
+| `POST /api/admin/competitions/{id}/override/grow-bracket` | — | `bracket_size` 16 → 32, renumbering later rounds. `409` on a 32 bracket. |
 | `GET /api/admin/competitions/{id}/admin-actions` | — | The audit log for 3.9. |
 
 ### 7.7 Housekeeping
@@ -1146,8 +1151,8 @@ Why not Vercel: the Hobby tier is licensed for personal, non-commercial use, and
 ### 8.1 First-time setup
 
 1. Push the repo to GitHub. Keep `main` as the production branch.
-2. Create a Supabase project (free tier, region Sydney). Apply the schema: either run `DATABASE_URL=<connection string> npm run db:migrate` locally, or paste `supabase/migrations/0001_init.sql` into the SQL editor. The migration enables RLS on every table itself (6.5).
-3. In Netlify, "Add new site" → "Import an existing project" → the GitHub repo. Netlify detects Next.js and installs its Next.js runtime; build command `npm run build`, no publish directory to set.
+2. Create a Supabase project (free tier, region Sydney). Apply the schema: run `DATABASE_URL=<session-pooler connection string> npm run db:migrate` locally, which applies every file in `supabase/migrations/` not yet recorded in `schema_migrations` (or paste them into the SQL editor in order). The first migration enables RLS on every table itself (6.5). Run the same command after any deploy that adds a migration.
+3. In Netlify, "Add new site" → "Import an existing project" → the GitHub repo. Netlify detects Next.js and installs its Next.js runtime; build command `npm run build`, no publish directory to set. **Set the functions region to Sydney (ap-southeast-2)** in Site configuration: functions default to a US region, the database is in Sydney, and every one of the handful of round trips a tap makes would otherwise cross the Pacific twice.
 4. Set the environment variables below under Site configuration → Environment variables, for Production and Deploy previews.
 5. Add `netlify.toml` with the daily ping as a scheduled function:
 
@@ -1231,7 +1236,7 @@ The `s-maxage=5` cache on `/api/public/bracket` (7.2) is what keeps this comfort
 
 ## 10. Decisions
 
-### 10.1 The twelve open questions, answered
+### 10.1 The organiser's rulings
 
 Nothing below was implemented by guessing. Each row is the organiser's ruling and where it lives in this document.
 
@@ -1240,7 +1245,7 @@ Nothing below was implemented by guessing. Each row is the organiser's ruling an
 | O-1 | Handicap adjustment amounts (§13, "TBC") | **Configurable, four numbers.** The top X finishers of the night change by Y, the bottom Z by W, everyone else unchanged. Defaults **X = 3, Y = −1, Z = 3, W = +2**. | 3.3 (settings), 3.7 (review screen), 5.9 (finishing order and groups), 6.3 `competitions.rating_*` |
 | O-2 | Data model detail (plan, "TBC") | **Produce one.** Section 6 is the model: one entry per slot, a second entry row for a buy-back, and a match row only once both slots of a pair are filled. | 6 |
 | O-3 | Buy-back capacity | **Capped by the open slots, first come first served.** When the slots run out the loser is out, however willing they were. | 3.5, 5.1, 6.3 `entries` |
-| O-4 | Free passes and later-round draws | **One optional buy-back per player.** Buy-backs fill the empty matches first and only then the slot beside a waiting first-draw player. At close, **every** player left without an opponent goes to round two, so round one may produce several free passes. Rounds two onwards are paired at random. | 5.2 (placement), 5.3 (close), 5.4 (later rounds), 6.3 `free_passes` |
+| O-4 | Free passes and later-round draws | **One optional buy-back per player.** At close, **every** player left without an opponent goes to round two, so round one may produce several free passes. (The rest of this ruling — empty matches first, later rounds random — was superseded by O-13 and O-14 on 6 September 2026.) | 5.2 (placement), 5.3 (close), 5.4 (later rounds), 6.3 `free_passes` |
 | O-5 | Cancelling a mistaken Start | **Yes, reversible** — plus a master override screen that can add and remove players and rebuild pairings whenever the organiser wishes. | 3.4 and 3.6 (Cancel start), 3.9 (override screen), 5.8, 5.10, 7.5, 7.6 |
 | O-6 | Correction when the loser's buy-back match has already started | **It should not happen.** The correction is refused; the master override is the way through if it does. | 5.7 step 3, 7.5 |
 | O-7 | Abandoning a competition | **Yes, an explicit action.** The night is closed, everything is kept, a new competition can start immediately. | 3.4, 3.9, 4.2, 5.11, 7.4 |
@@ -1249,6 +1254,10 @@ Nothing below was implemented by guessing. Each row is the organiser's ruling an
 | O-10 | Vercel Hobby's non-commercial terms | **Move off Vercel.** Host on Netlify, whose free tier permits club use. | 8, 9 |
 | O-11 | Database choice (plan says Turso, spec says Supabase) | **Supabase**, on its free tier, which permits club use and has the row editor the organiser needs on the night. The plan file has been updated. | 8, 9, [tournament-app-plan.md](tournament-app-plan.md) |
 | O-12 | Buy-backs after a manual close | **Confirmed as specified.** Close is allowed at any time in round one; losers who arise afterwards are out. | 3.4, 5.3 |
+| O-13 | Buy-back modes (§9 had two) | **One rule, no setting.** A buy-back or late arrival is placed the moment they enter: a **random empty match** while one exists (even if a first-draw player is waiting alone elsewhere), otherwise the seat beside a **random lone player**, first-draw or buy-back alike. The organiser's worked example: 5 players; P2 buys back into the empty M4, not beside P5 in M3; P3 buys back and, with nothing empty, lands beside P2 or P5 at random. | 3.4, 5.2, 6.2, 7.4 |
+| O-14 | How later rounds are paired | **A fixed bracket, like the paper diagram.** The winners of M1 and M2 meet in round two, and so on up the tree; a winner moves up the moment their match ends; a free pass is what an empty other half gives you, in any round, possibly several times to the same player. Drawn as a tree on both the public and admin pages. | 3.4, 3.8, 5.3, 5.4, 5.7, 5.10, 6.3 `matches.number` |
+
+Revision 3 also moved the match time limit and rating scale to a settings page (3.10), added the club badge (3), the List \| Tree switch (3.4, 3.8) and the locked "Saving…" card (3.4), all at the organiser's request.
 
 ### 10.2 Amendments applied to the rules document
 
@@ -1259,9 +1268,11 @@ Nothing below was implemented by guessing. Each row is the organiser's ruling an
 | §3, buy-backs | "Buy-back players play each other in round one" | Buying back is optional and once per player; buy-backs fill the empty slots, **empty matches first**, so they usually meet each other and only then a waiting first-draw player. Adds the **first-come-first-served slot cap** (O-3), which players need to know about because it can leave a willing loser out. Adds that the override can reopen a window closed by mistake (O-5). |
 | §4, free passes | "Round one can one or more free passes" (unfinished sentence) | Spells out **why** round one can give several: at close, everyone still without an opponent goes through. Adds that Force Pair before closing is the way to avoid it, and that rounds two onwards give at most one (O-4). |
 | **§6, handicaps** | "The lower-rated player starts the frame with two thirds of the rating difference" | **The lower the number, the better the player, and ratings can go below zero.** The start goes to the player with the **higher** number. The §6 example is restated as "the player on 45 starts on 17", with a negative worked example beside it. "Winners go up, losers come down" is now stated in numbers: a good night brings your number **down**. |
-| §8, setup | Three steps | Adds **abandon the night** (O-7) and the **override screen** (O-5). |
-| §9, buy-back modes | Two modes | Adds that either mode fills empty matches before the seat beside a waiting first-draw player (O-4). |
-| §11, closing | "The system fills every possible round-one match before giving a free pass. Only a player with no possible opponent gets one." | Replaced: at close every player without an opponent gets a free pass, and there may be more than one (O-4). |
+| §8, setup | Three steps | Adds **abandon the night** (O-7) and the **override screen** (O-5). Revision 3: no buy-back mode to pick; the time limit and rating scale live on the settings page. |
+| §9, buy-back modes | Two modes | Revision 3: rewritten as **Buy-back placement** — one rule, placed at once, random empty match first, then beside a random lone player (O-13). |
+| §11, closing | "The system fills every possible round-one match before giving a free pass. Only a player with no possible opponent gets one." | Replaced: at close every player without an opponent gets a free pass, and there may be more than one (O-4). Revision 3: winners move up the bracket as each match finishes; no round draw (O-14). |
+| §3, buy-backs (revision 3) | "empty matches first … then a first-draw player who is still waiting" | A random empty match, then beside a random waiting player, first-draw or buy-back alike (O-13). |
+| §4, free passes (revision 3) | "one player drawn at random advances"; "at most one free pass per round from round two" | The bracket is fixed; a free pass is an empty other half; any round, any number, possibly the same player several times (O-14). |
 | §12, timer and status | Start, Complete, Correct | Adds **Cancel start** (O-5), and that the override can unwind a result once a correction is too late (O-6). |
 | §13, ratings | "Proposed scale, amounts **TBC**" | The configurable top-X-by-Y / bottom-Z-by-W scale with its defaults (O-1), one code per organiser so "who changed it" needs no typing (O-8), and players being deactivated rather than deleted (O-9). |
 | Footer | "Still to confirm: handicap adjustment amounts (13)" | Nothing outstanding; points at section 10 here for the rulings. |

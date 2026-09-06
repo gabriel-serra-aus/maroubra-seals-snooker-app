@@ -87,12 +87,12 @@ export const api = {
   createCompetition: (body: unknown = {}) =>
     call<{ competition: { id: string; name: string; bracket_size: number; rating_top_count: number; rating_bottom_delta: number } }>(competitions.POST, "POST", "/api/admin/competitions", { body }),
   getCompetition: (id: string) => call<BracketPayload>(competitionById.GET, "GET", `/api/admin/competitions/${id}`, { params: { id } }),
-  patchCompetition: (id: string, body: unknown) => call<{ matches_created: number[]; bracket: BracketPayload }>(competitionById.PATCH, "PATCH", `/api/admin/competitions/${id}`, { body, params: { id } }),
-  addEntry: (id: string, body: unknown) => call<{ entry_id: string; match_number: number | null; bracket: BracketPayload }>(entries.POST, "POST", `/api/admin/competitions/${id}/entries`, { body, params: { id } }),
+  patchCompetition: (id: string, body: unknown) => call<{ bracket: BracketPayload }>(competitionById.PATCH, "PATCH", `/api/admin/competitions/${id}`, { body, params: { id } }),
+  addEntry: (id: string, body: unknown) => call<{ entry_id: string; match_number: number | null; awaiting_in: number | null; bracket: BracketPayload }>(entries.POST, "POST", `/api/admin/competitions/${id}/entries`, { body, params: { id } }),
   removeEntry: (id: string, entryId: string) => call(entryById.DELETE, "DELETE", `/api/admin/competitions/${id}/entries/${entryId}`, { params: { id, entryId } }),
   start: (id: string) => call<{ bracket: BracketPayload }>(start.POST, "POST", `/api/admin/competitions/${id}/start`, { params: { id } }),
   forcePair: (id: string) => call<{ match_number: number; bracket: BracketPayload }>(forcePair.POST, "POST", `/api/admin/competitions/${id}/force-pair`, { params: { id } }),
-  closeBuybacks: (id: string) => call<{ free_passes: number; matches_created: number[]; round_drawn: number | null; bracket: BracketPayload }>(closeBuybacks.POST, "POST", `/api/admin/competitions/${id}/close-buybacks`, { params: { id } }),
+  closeBuybacks: (id: string) => call<{ free_passes: number; free_pass_names: string[]; matches_created: number[]; completed: boolean; bracket: BracketPayload }>(closeBuybacks.POST, "POST", `/api/admin/competitions/${id}/close-buybacks`, { params: { id } }),
   abandon: (id: string) => call(abandon.POST, "POST", `/api/admin/competitions/${id}/abandon`, { params: { id } }),
   ratingReview: (id: string) => call<{ rows: Array<{ player_id: string; name: string; current_rating: number; proposed_rating: number; delta: number; group: string; finish: string }> }>(ratingReview.GET, "GET", `/api/admin/competitions/${id}/rating-review`, { params: { id } }),
   saveRatingReview: (id: string, changes: Array<{ player_id: string; new_rating: number }>) => call<{ written: number }>(ratingReview.POST, "POST", `/api/admin/competitions/${id}/rating-review`, { body: { changes }, params: { id } }),
@@ -126,7 +126,7 @@ export interface CompleteReply {
   buyback_match_number: number | null;
   auto_closed: boolean;
   free_passes: number;
-  round_drawn: number | null;
+  winner_to: { kind: string; round: number | null; match_number: number | null };
   completed: boolean;
   bracket: BracketPayload;
 }

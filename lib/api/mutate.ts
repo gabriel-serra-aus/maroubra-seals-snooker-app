@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/db/client";
 import { applySnapshotDiff } from "@/lib/db/apply";
 import { insertAdminActions } from "@/lib/db/adminActions";
-import { findLiveCompetition, loadSnapshot, lockCompetition } from "@/lib/db/snapshot";
+import { findLiveCompetition, loadSnapshot, lockCompetition, lockCompetitionOfMatch } from "@/lib/db/snapshot";
 import { buildBracketPayload, type BracketPayload } from "@/lib/bracket/payload";
 import type { Session } from "@/lib/auth/session";
 import { describeChanges } from "@/lib/logic/describe";
@@ -16,6 +16,8 @@ import { cloneSnapshot, type AdminAction, type Ctx, type Snapshot } from "@/lib/
 export interface MutateOptions {
   /** Competition id, or omit for the live (setup / in_progress) one. */
   competitionId?: string;
+  /** A match id: locks that match's competition in the same query, saving a round trip on the match routes. */
+  matchId?: string;
   /** Players to load into the snapshot beyond those already entered (for adding someone). */
   extraPlayerIds?: string[];
   dryRun?: boolean;
@@ -41,10 +43,16 @@ export async function mutateCompetition<T>(
 ): Promise<MutateResult<T>> {
   const db = await getDb();
   return db.transaction(async (tx) => {
-    const live = opts.competitionId ? { id: opts.competitionId } : await findLiveCompetition(tx);
-    if (!live) throw notFound("No competition is set up");
-    const competition = await lockCompetition(tx, live.id);
-    if (!competition) throw notFound("Competition not found");
+    let competition;
+    if (opts.matchId) {
+      competition = await lockCompetitionOfMatch(tx, opts.matchId);
+      if (!competition) throw notFound("Match not found");
+    } else {
+      const live = opts.competitionId ? { id: opts.competitionId } : await findLiveCompetition(tx);
+      if (!live) throw notFound("No competition is set up");
+      competition = await lockCompetition(tx, live.id);
+      if (!competition) throw notFound("Competition not found");
+    }
     const before = await loadSnapshot(tx, competition, opts.extraPlayerIds ?? []);
     const after = cloneSnapshot(before);
     const ctx = makeCtx(session.name);

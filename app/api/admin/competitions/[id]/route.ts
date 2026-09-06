@@ -2,9 +2,8 @@
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { mutateCompetition, readSnapshot } from "@/lib/api/mutate";
-import { optionalEnum, optionalInt, optionalString } from "@/lib/api/validate";
+import { optionalInt, optionalString } from "@/lib/api/validate";
 import { buildBracketPayload } from "@/lib/bracket/payload";
-import { switchBuybackMode } from "@/lib/logic/buybacks";
 import { conflict, notFound } from "@/lib/logic/errors";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +23,6 @@ export const PATCH = handle(async (request, { params }) => {
   const name = optionalString(body, "name", 80);
   const size = optionalInt(body, "bracket_size", 16, 32);
   if (size !== undefined && size !== 16 && size !== 32) return json({ error: "bracket_size must be 16 or 32" }, { status: 400 });
-  const mode = optionalEnum(body, "buyback_mode", ["random_draw", "sequential"] as const);
   const limit = optionalInt(body, "default_time_limit_minutes", 1, 180);
   const rating = {
     rating_top_count: optionalInt(body, "rating_top_count", 0, 64),
@@ -32,7 +30,7 @@ export const PATCH = handle(async (request, { params }) => {
     rating_bottom_count: optionalInt(body, "rating_bottom_count", 0, 64),
     rating_bottom_delta: optionalInt(body, "rating_bottom_delta", -50, 50),
   };
-  const r = await mutateCompetition(session, { competitionId: id }, (s, ctx) => {
+  const r = await mutateCompetition(session, { competitionId: id }, (s) => {
     const c = s.competition;
     if (c.status === "complete" || c.status === "abandoned") throw conflict("This competition is over");
     if (name) c.name = name;
@@ -44,8 +42,6 @@ export const PATCH = handle(async (request, { params }) => {
       c.bracket_size = size;
     }
     for (const [k, v] of Object.entries(rating)) if (v !== undefined) c[k as keyof typeof rating] = v;
-    if (mode !== undefined && mode !== c.buyback_mode) return switchBuybackMode(s, ctx, mode).map((m) => m.number);
-    return [];
   });
-  return json({ ok: true, matches_created: r.result, bracket: r.bracket });
+  return json({ ok: true, bracket: r.bracket });
 });

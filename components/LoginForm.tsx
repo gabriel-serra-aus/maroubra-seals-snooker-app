@@ -32,14 +32,19 @@ export function LoginForm() {
   };
   return (
     <main>
-      <h1>Maroubra Seals Snooker</h1>
-      <p className="muted">Organiser login</p>
+      <div className="brand center">
+        {/* Served as-is from public/: three fixed sizes, no image service needed (plan: cheap and self-contained). */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/club-logo.png" alt="Maroubra Seals Snooker Club" className="logo-lg" />
+        <h1>Maroubra Seals Snooker</h1>
+        <p className="muted">Organiser login</p>
+      </div>
       <form onSubmit={submit} className="stack">
         <label className="field">
           <span>Admin code</span>
           <input type="password" autoComplete="current-password" autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
         </label>
-        <button className="btn primary wide" disabled={busy || !code}>Log in</button>
+        <button className="btn primary wide" disabled={busy || !code}>{busy ? "Signing in…" : "Log in"}</button>
         {rejected && <div className="error">Code not accepted. Try again.</div>}
       </form>
       <p style={{ marginTop: 24 }}>

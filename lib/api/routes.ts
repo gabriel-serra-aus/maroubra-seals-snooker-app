@@ -3,19 +3,12 @@
 import { getDb } from "@/lib/db/client";
 import { createPlayer } from "@/lib/db/players";
 import type { Session } from "@/lib/auth/session";
-import { notFound } from "@/lib/logic/errors";
 import type { CompleteResult } from "@/lib/logic/matchControl";
+import type { Advancement } from "@/lib/logic/rounds";
 import type { Ctx, Snapshot } from "@/lib/logic/types";
 import { json, readJson } from "./respond";
 import { mutateCompetition, type MutateOptions } from "./mutate";
 import { optionalBool, requiredRating, requiredString, requiredUuid } from "./validate";
-
-export async function competitionIdOfMatch(matchId: string): Promise<string> {
-  const db = await getDb();
-  const rows = await db.query<{ competition_id: string }>("select competition_id from matches where id = $1", [matchId]);
-  if (!rows[0]) throw notFound("Match not found");
-  return rows[0].competition_id;
-}
 
 /** `{ player_id }` or `{ new_player: { name, rating } }` — the second creates the club player first (spec 7.4). */
 export async function resolvePlayerId(body: Record<string, unknown>, session: Session): Promise<string> {
@@ -65,8 +58,16 @@ export function completeResponse(r: CompleteResult) {
     buyback_match_number: r.loser.buybackMatch?.number ?? null,
     auto_closed: r.autoClose !== null,
     free_passes: r.autoClose?.freePasses.length ?? 0,
-    round_drawn: r.draw && !r.draw.completed ? r.draw.round : null,
-    completed: r.draw?.completed ?? false,
+    winner_to: advancementJson(r.winnerTo),
+    completed: r.completed,
+  };
+}
+
+export function advancementJson(a: Advancement) {
+  return {
+    kind: a.kind,
+    round: "round" in a ? a.round : null,
+    match_number: a.kind === "match" ? a.number : null,
   };
 }
 

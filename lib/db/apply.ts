@@ -1,5 +1,7 @@
 // Persists what the pure logic did: diff a before/after Snapshot and write the inserts, updates and
 // deletes in a foreign-key-safe order. Nothing else in the app writes to entries, matches or free_passes.
+// Rows of one kind go in one statement (inserts, deletes) or one batch of statements (updates) so a
+// Complete costs a handful of round trips to the database, not a dozen.
 
 import type { Queryable } from "./client";
 import type { CompetitionRow, EntryRow, FreePassRow, MatchRow, Snapshot } from "@/lib/logic/types";
@@ -15,7 +17,7 @@ const MATCH_COLS: (keyof MatchRow)[] = [
 ];
 const FREE_PASS_COLS: (keyof FreePassRow)[] = ["competition_id", "entry_id", "from_round", "granted_at"];
 const COMPETITION_COLS: (keyof CompetitionRow)[] = [
-  "name", "status", "bracket_size", "buyback_mode", "default_time_limit_minutes", "rating_top_count",
+  "name", "status", "bracket_size", "default_time_limit_minutes", "rating_top_count",
   "rating_top_delta", "rating_bottom_count", "rating_bottom_delta", "started_at", "buybacks_closed_at",
   "completed_at", "abandoned_at", "winner_entry_id",
 ];
@@ -38,23 +40,35 @@ function diff<T extends Row>(before: T[], after: T[], cols: (keyof T)[]) {
   return { inserts, updates, deletes };
 }
 
+/** One multi-row insert per table. */
 async function insertRows<T extends Row>(q: Queryable, table: string, rows: T[], cols: (keyof T)[]) {
-  for (const r of rows) {
-    const names = ["id", ...cols.map(String)];
-    const params = names.map((_, i) => `$${i + 1}`);
-    await q.query(`insert into ${table} (${names.join(", ")}) values (${params.join(", ")})`, [r.id, ...cols.map((c) => r[c])]);
-  }
+  if (rows.length === 0) return;
+  const names = ["id", ...cols.map(String)];
+  const params: unknown[] = [];
+  const tuples = rows.map((r) => {
+    const values = [r.id, ...cols.map((c) => r[c])];
+    const placeholders = values.map((v) => {
+      params.push(v);
+      return `$${params.length}`;
+    });
+    return `(${placeholders.join(", ")})`;
+  });
+  await q.query(`insert into ${table} (${names.join(", ")}) values ${tuples.join(", ")}`, params);
 }
 
+/** Updates are sent together; the driver pipelines them on the one connection. */
 async function updateRows<T extends Row>(q: Queryable, table: string, rows: T[], cols: (keyof T)[]) {
-  for (const r of rows) {
-    const sets = cols.map((c, i) => `${String(c)} = $${i + 2}`);
-    await q.query(`update ${table} set ${sets.join(", ")} where id = $1`, [r.id, ...cols.map((c) => r[c])]);
-  }
+  await Promise.all(
+    rows.map((r) => {
+      const sets = cols.map((c, i) => `${String(c)} = $${i + 2}`);
+      return q.query(`update ${table} set ${sets.join(", ")} where id = $1`, [r.id, ...cols.map((c) => r[c])]);
+    }),
+  );
 }
 
 async function deleteRows<T extends Row>(q: Queryable, table: string, rows: T[]) {
-  for (const r of rows) await q.query(`delete from ${table} where id = $1`, [r.id]);
+  if (rows.length === 0) return;
+  await q.query(`delete from ${table} where id = any($1::uuid[])`, [rows.map((r) => r.id)]);
 }
 
 export async function applySnapshotDiff(q: Queryable, before: Snapshot, after: Snapshot): Promise<void> {
@@ -72,9 +86,11 @@ export async function applySnapshotDiff(q: Queryable, before: Snapshot, after: S
   await deleteRows(q, "free_passes", passes.deletes);
   // Updates that clear links must land before the referenced rows go.
   await updateRows(q, "entries", entries.updates, ENTRY_COLS);
-  await deleteRows(q, "entries", entries.deletes.slice().sort((a, b) => (a.rebuy_of_entry_id ? 0 : 1) - (b.rebuy_of_entry_id ? 0 : 1)));
+  await deleteRows(q, "entries", entries.deletes.filter((e) => e.rebuy_of_entry_id));
+  await deleteRows(q, "entries", entries.deletes.filter((e) => !e.rebuy_of_entry_id));
   // 3. Inserts: draw-source entries before the buy-backs that reference them.
-  await insertRows(q, "entries", entries.inserts.slice().sort((a, b) => (a.rebuy_of_entry_id ? 1 : 0) - (b.rebuy_of_entry_id ? 1 : 0)), ENTRY_COLS);
+  await insertRows(q, "entries", entries.inserts.filter((e) => !e.rebuy_of_entry_id), ENTRY_COLS);
+  await insertRows(q, "entries", entries.inserts.filter((e) => e.rebuy_of_entry_id), ENTRY_COLS);
   await insertRows(q, "matches", matches.inserts, MATCH_COLS);
   await updateRows(q, "matches", matches.updates, MATCH_COLS);
   await insertRows(q, "free_passes", passes.inserts, FREE_PASS_COLS);

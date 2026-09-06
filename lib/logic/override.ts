@@ -3,21 +3,24 @@
 import { badRequest, conflict, notFound } from "./errors";
 import { createBuybackEntry } from "./buybacks";
 import {
-  currentRound,
+  boxOf,
+  boxOfMatch,
   drawEntryOf,
   buybackEntryOf,
+  entryAtSlot,
   entryById,
   isWaitingIn,
   matchById,
   matchLabel,
+  matchNumberFor,
   matchesOf,
   openSlots,
   positionOf,
   playerName,
   removeMatch,
 } from "./derive";
-import { createMatch, nextMatchNumber, pairInRoundOne, placeInSlot, refreshStart } from "./matches";
-import { maybeDrawNextRound, resetMatchInternal, unwindAdvance } from "./rounds";
+import { createMatch, pairInRoundOne, placeInSlot, refreshStart } from "./matches";
+import { advanceAll, resetMatchInternal, unwindAdvance } from "./rounds";
 import type { Ctx, EntryRow, FreePassRow, MatchRow, Snapshot } from "./types";
 
 function getMatch(s: Snapshot, id: string): MatchRow {
@@ -26,11 +29,33 @@ function getMatch(s: Snapshot, id: string): MatchRow {
   return m;
 }
 
-/** Grow bracket 16 → 32 (spec 3.9): only adds open slots. */
+/**
+ * Grow bracket 16 → 32 (spec 3.9): adds open slots. The old tree becomes the top half of the new one, so
+ * round-one numbers are unchanged and every later match is renumbered by its position (spec 5.4).
+ */
 export function growBracket(s: Snapshot, ctx: Ctx): void {
   if (s.competition.bracket_size !== 16) throw conflict("The bracket is already 32");
+  for (const m of s.matches) if (m.round >= 2) m.number = matchNumberFor(32, m.round, boxOfMatch(16, m));
   s.competition.bracket_size = 32;
   ctx.log.push({ action: "grow_bracket", details: { from: 16, to: 32 } });
+}
+
+/**
+ * Empty round-one slots a new player can still take (spec 5.10): not under a box already decided — by a
+ * free pass through it, or by a match created in it.
+ */
+export function openPlaces(s: Snapshot): number[] {
+  const B = s.competition.bracket_size;
+  const blocked = (slot: number) => {
+    for (const fp of s.freePasses) {
+      const holder = entryById(s, fp.entry_id);
+      if (holder.slot !== null && boxOf(holder.slot, fp.from_round) === boxOf(slot, fp.from_round)) return true;
+    }
+    return s.matches.some((m) => m.round >= 2 && boxOfMatch(B, m) === boxOf(slot, m.round));
+  };
+  const out: number[] = [];
+  for (let slot = 1; slot <= B; slot++) if (!entryAtSlot(s, slot) && !blocked(slot)) out.push(slot);
+  return out;
 }
 
 /** Add a player at any point, ignoring open slots, the closed window and the one-buy-back rule. */
@@ -43,36 +68,29 @@ export function overrideAddPlayer(s: Snapshot, ctx: Ctx, playerId: string): Entr
   const draw = drawEntryOf(s, playerId);
   const buyback = buybackEntryOf(s, playerId);
   if (draw && buyback) throw conflict(`${player.name} already has two entries tonight`);
-  const r = currentRound(s);
-  let entry: EntryRow;
-  if (r === 1) {
-    if (openSlots(s) <= 0) {
-      if (s.competition.bracket_size === 32) throw conflict("The 32 bracket is full");
-      growBracket(s, ctx);
-    }
-    if (buyback && !draw) {
-      // Their buy-back entry is spent; the only row the schema allows is a draw-source one.
-      entry = blankEntry(s, ctx, playerId, 1);
-      s.entries.push(entry);
-      placeInSlot(s, ctx, entry, "override");
-    } else {
-      entry = createBuybackEntry(s, ctx, playerId, draw?.id ?? null, { force: true }).entry;
-      if (draw) draw.buyback_decision = "bought_back";
-    }
-  } else {
-    entry = { ...blankEntry(s, ctx, playerId, r), source: buyback && !draw ? "draw" : "buyback" };
-    if (entry.source === "buyback") {
-      entry.buyback_seq = Math.max(0, ...s.entries.map((e) => e.buyback_seq ?? 0)) + 1;
-      entry.rebuy_of_entry_id = draw?.id ?? null;
-    }
-    s.entries.push(entry);
+  let places = openSlots(s) > 0 ? openPlaces(s) : [];
+  if (places.length === 0) {
+    if (s.competition.bracket_size === 32) throw conflict("No open place in the 32 bracket for another player");
+    growBracket(s, ctx);
+    places = openPlaces(s);
   }
-  ctx.log.push({ action: "add_player", details: { player: player.name, round: r, entry: entry.id } });
-  maybeDrawNextRound(s, ctx);
+  const slot = places[0];
+  let entry: EntryRow;
+  if (buyback && !draw) {
+    // Their buy-back entry is spent; the only row the schema allows is a draw-source one.
+    entry = blankEntry(s, ctx, playerId);
+    s.entries.push(entry);
+    placeInSlot(s, ctx, entry, "override", slot);
+  } else {
+    entry = createBuybackEntry(s, ctx, playerId, draw?.id ?? null, { force: true, slot }).entry;
+    if (draw) draw.buyback_decision = "bought_back";
+  }
+  ctx.log.push({ action: "add_player", details: { player: player.name, slot, entry: entry.id } });
+  advanceAll(s, ctx);
   return entry;
 }
 
-function blankEntry(s: Snapshot, ctx: Ctx, playerId: string, joinedRound: number): EntryRow {
+function blankEntry(s: Snapshot, ctx: Ctx, playerId: string): EntryRow {
   const player = s.players.find((p) => p.id === playerId)!;
   return {
     id: ctx.newId(),
@@ -84,7 +102,7 @@ function blankEntry(s: Snapshot, ctx: Ctx, playerId: string, joinedRound: number
     rebuy_of_entry_id: null,
     buyback_decision: null,
     rating_at_entry: player.rating,
-    joined_round: joinedRound,
+    joined_round: 1,
     entered_at: ctx.now,
   };
 }
@@ -109,8 +127,8 @@ export function overrideRemovePlayer(s: Snapshot, ctx: Ctx, playerId: string): s
       if (m.state === "in_play") throw conflict(`${matchLabel(m)} is in play — reset it first`);
       if (m.state === "finished" && m.winner_id !== e.id) continue;
       if (m.state === "finished") {
-        const { deletedNumbers } = unwindAdvance(s, ctx, e.id, m.round, { force: false });
-        for (const n of deletedNumbers) changes.push(`M${n} deleted`);
+        const { deleted } = unwindAdvance(s, ctx, e.id, m.round, { force: false });
+        for (const d of deleted) changes.push(`${matchLabel(d)} deleted`);
         changes.push(`${matchLabel(m)} voided`);
       } else {
         changes.push(`${matchLabel(m)} deleted`);
@@ -139,11 +157,15 @@ export function overrideRemovePlayer(s: Snapshot, ctx: Ctx, playerId: string): s
     s.competition.completed_at = null;
   }
   ctx.log.push({ action: "remove_player", details: { player: name, changes } });
-  maybeDrawNextRound(s, ctx);
+  advanceAll(s, ctx);
   return changes;
 }
 
-/** Swap one player of a not-started or in-play match for a waiting player; start recalculated (5.6). */
+/**
+ * Swap one player of a not-started or in-play match for a waiting player; start recalculated (5.6).
+ * From round two the newcomer must be waiting in the same box of the tree, which is the only place the
+ * match can be (spec 5.4).
+ */
 export function overrideReplacePlayer(s: Snapshot, ctx: Ctx, matchId: string, side: "a" | "b", newEntryId: string): MatchRow {
   const m = getMatch(s, matchId);
   if (m.state === "finished") throw conflict(`${matchLabel(m)} is finished — reset it first`);
@@ -151,7 +173,11 @@ export function overrideReplacePlayer(s: Snapshot, ctx: Ctx, matchId: string, si
   if (!isWaitingIn(s, newEntryId, m.round)) throw conflict(`${playerName(s, newEntryId)} is not waiting in round ${m.round}`);
   const oldId = side === "a" ? m.player_a_id : m.player_b_id;
   const oldEntry = entryById(s, oldId);
-  if (m.round === 1) [oldEntry.slot, newEntry.slot] = [newEntry.slot, oldEntry.slot];
+  if (m.round === 1) {
+    [oldEntry.slot, newEntry.slot] = [newEntry.slot, oldEntry.slot];
+  } else if (newEntry.slot === null || boxOf(newEntry.slot, m.round) !== boxOfMatch(s.competition.bracket_size, m)) {
+    throw conflict(`${playerName(s, newEntryId)} is in a different part of the bracket from ${matchLabel(m)}`);
+  }
   if (side === "a") m.player_a_id = newEntryId;
   else m.player_b_id = newEntryId;
   refreshStart(s, m);
@@ -168,18 +194,24 @@ export function overrideResetMatch(s: Snapshot, ctx: Ctx, matchId: string): Matc
   const before = m.state;
   resetMatchInternal(s, ctx, m, { force: true });
   ctx.log.push({ action: "reset_match", details: { match: matchLabel(m), from: before } });
+  advanceAll(s, ctx);
   return m;
 }
 
-/** Delete: the match goes, both players return to waiting (round-one slots are kept). */
+/**
+ * Delete: the match goes and both players return to waiting in round one, keeping their slots. Only round
+ * one: from round two the tree has exactly one place for those two players, so the automatic step would
+ * put the match straight back — Reset or Replace a player are the tools there (spec 5.10).
+ */
 export function overrideDeleteMatch(s: Snapshot, ctx: Ctx, matchId: string): void {
   const m = getMatch(s, matchId);
+  if (m.round !== 1) throw conflict(`${matchLabel(m)} is in round ${m.round} — use Reset or Replace a player; only a round-one match can be deleted`);
   resetMatchInternal(s, ctx, m, { force: true });
   removeMatch(s, m);
   ctx.log.push({ action: "delete_match", details: { match: matchLabel(m), a: playerName(s, m.player_a_id), b: playerName(s, m.player_b_id) } });
 }
 
-/** Pair two chosen waiting players in the current round, no randomness, any round. */
+/** Pair two chosen waiting players in the same round, no randomness. From round two they must share a box. */
 export function overridePair(s: Snapshot, ctx: Ctx, aId: string, bId: string): MatchRow {
   if (aId === bId) throw badRequest("Choose two different players");
   const pa = positionOf(s, aId);
@@ -188,7 +220,19 @@ export function overridePair(s: Snapshot, ctx: Ctx, aId: string, bId: string): M
   if (pb.status !== "waiting") throw conflict(`${playerName(s, bId)} is not waiting`);
   if (pa.round !== pb.round) throw conflict(`${playerName(s, aId)} and ${playerName(s, bId)} are in different rounds`);
   const r = pa.round;
-  const m = r === 1 ? pairInRoundOne(s, ctx, aId, bId, "override") : createMatch(s, ctx, aId, bId, r, nextMatchNumber(s), "override");
+  let m: MatchRow;
+  if (r === 1) {
+    m = pairInRoundOne(s, ctx, aId, bId, "override");
+  } else {
+    const a = entryById(s, aId);
+    const b = entryById(s, bId);
+    if (a.slot === null || b.slot === null || boxOf(a.slot, r) !== boxOf(b.slot, r)) {
+      throw conflict(`${playerName(s, aId)} and ${playerName(s, bId)} are in different parts of the bracket`);
+    }
+    const k = boxOf(a.slot, r);
+    const [lo, hi] = a.slot < b.slot ? [a, b] : [b, a];
+    m = createMatch(s, ctx, lo.id, hi.id, r, matchNumberFor(s.competition.bracket_size, r, k), "override");
+  }
   ctx.log.push({ action: "pair", details: { match: matchLabel(m), a: playerName(s, aId), b: playerName(s, bId), round: r } });
   return m;
 }
@@ -198,7 +242,7 @@ export function overrideGrantFreePass(s: Snapshot, ctx: Ctx, entryId: string, fr
   const fp: FreePassRow = { id: ctx.newId(), competition_id: s.competition.id, entry_id: entryId, from_round: fromRound, granted_at: ctx.now };
   s.freePasses.push(fp);
   ctx.log.push({ action: "grant_free_pass", details: { player: playerName(s, entryId), from_round: fromRound } });
-  maybeDrawNextRound(s, ctx);
+  advanceAll(s, ctx);
   return fp;
 }
 
@@ -211,10 +255,20 @@ export function overrideRevokeFreePass(s: Snapshot, ctx: Ctx, freePassId: string
   ctx.log.push({ action: "revoke_free_pass", details: { player: playerName(s, fp.entry_id), from_round: fp.from_round } });
 }
 
-/** Reopen buy-backs: the one place "no more entries for the night" can be undone. */
+/**
+ * Reopen buy-backs: the one place "no more entries for the night" can be undone. Everything the close
+ * caused is taken back — every free pass, and the not-started matches its holders reached through them.
+ * Refuses, naming the match, if one of those matches has started.
+ */
 export function overrideReopenBuybacks(s: Snapshot, ctx: Ctx): void {
-  if (s.competition.status !== "in_progress" || currentRound(s) !== 1) throw conflict("Buy-backs can only be reopened in round one");
+  if (s.competition.status !== "in_progress") throw conflict("The competition is not running");
   if (s.competition.buybacks_closed_at === null) throw conflict("Buy-backs are already open");
+  const passes = s.freePasses.slice().sort((a, b) => a.from_round - b.from_round);
+  for (const fp of passes) {
+    if (!s.freePasses.includes(fp)) continue; // removed by an earlier unwind
+    unwindAdvance(s, ctx, fp.entry_id, fp.from_round, { force: false });
+    s.freePasses = s.freePasses.filter((x) => x !== fp);
+  }
   s.competition.buybacks_closed_at = null;
-  ctx.log.push({ action: "reopen_buybacks", details: {} });
+  ctx.log.push({ action: "reopen_buybacks", details: { free_passes_revoked: passes.length } });
 }

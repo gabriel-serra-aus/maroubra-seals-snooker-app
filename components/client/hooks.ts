@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { serverOffsetMs } from "@/lib/timer";
 
 /**
  * Polls a JSON URL every `intervalMs`, and again whenever the page becomes visible (a locked phone coming
  * back), so the clocks and results are current without the viewer doing anything (spec 3.8, 5.12).
+ * `setData` lets an action drop in the bracket its own reply carried, so nothing waits for a second fetch.
  */
 export function usePoll<T>(url: string, intervalMs: number, initial: T) {
   const [data, setData] = useState<T>(initial);
@@ -75,4 +76,46 @@ export function useAction() {
     }
   }, []);
   return { busy, error, run, setError };
+}
+
+/**
+ * A per-viewer preference kept in localStorage, which may be missing or blocked (private mode, a
+ * thumbnail render): a module-level cache keeps the choice working for the session either way, and the
+ * server render always sees the fallback so hydration matches.
+ */
+const choiceCache = new Map<string, string>();
+const choiceListeners = new Set<() => void>();
+function subscribeChoice(cb: () => void) {
+  choiceListeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    choiceListeners.delete(cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+
+export function useStoredChoice<T extends string>(key: string, fallback: T): [T, (v: T) => void] {
+  const read = useCallback((): T => {
+    const cached = choiceCache.get(key);
+    if (cached) return cached as T;
+    try {
+      return (window.localStorage.getItem(key) as T | null) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }, [key, fallback]);
+  const value = useSyncExternalStore(subscribeChoice, read, () => fallback);
+  const set = useCallback(
+    (v: T) => {
+      choiceCache.set(key, v);
+      try {
+        window.localStorage.setItem(key, v);
+      } catch {
+        /* storage blocked: the cache carries it for this visit */
+      }
+      for (const l of choiceListeners) l();
+    },
+    [key],
+  );
+  return [value, set];
 }

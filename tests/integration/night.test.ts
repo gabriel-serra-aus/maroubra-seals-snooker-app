@@ -33,7 +33,7 @@ describe("session (spec 7.1)", () => {
   });
 });
 
-describe("a 13-of-16 night, Random Draw, end to end", () => {
+describe("a 13-of-16 night, end to end", () => {
   const ids: Record<string, string> = {};
   let comp = "";
 
@@ -61,10 +61,12 @@ describe("a 13-of-16 night, Random Draw, end to end", () => {
     const b = (await api.getCompetition(comp)).body;
     expect(b.competition?.status).toBe("setup");
     expect(b.competition?.open_slots).toBe(3);
-    // Untick and re-tick one player.
-    const s = await api.patchCompetition(comp, { bracket_size: 32 });
+    expect(b.competition?.rounds_total).toBe(4);
+    // The settings page edits the same row (spec 3.10).
+    const s = await api.patchCompetition(comp, { bracket_size: 32, default_time_limit_minutes: 30 });
     expect(s.status).toBe(200);
-    expect((await api.patchCompetition(comp, { bracket_size: 16 })).status).toBe(200);
+    expect(s.body.bracket.competition?.default_time_limit_minutes).toBe(30);
+    expect((await api.patchCompetition(comp, { bracket_size: 16, default_time_limit_minutes: 25 })).status).toBe(200);
     // Deactivating an entered player is refused (O-9).
     expect((await api.patchPlayer(ids["Alice Chen"], { active: false })).status).toBe(409);
     expect((await api.patchPlayer(ids["Pat Quin"], { active: false })).status).toBe(200);
@@ -81,6 +83,10 @@ describe("a 13-of-16 night, Random Draw, end to end", () => {
     expect(r1.awaiting).toHaveLength(1);
     expect(r1.awaiting[0]).toMatchObject({ number: 7, slot: 13 });
     expect(r1.waiting).toHaveLength(1);
+    expect(r1.boxes).toHaveLength(8);
+    expect(r1.boxes[6]).toMatchObject({ k: 7, number: 7, match: null, free_pass: false });
+    expect(r1.boxes[6].entry?.slot).toBe(13);
+    expect(r1.boxes[7]).toMatchObject({ k: 8, number: 8, match: null, entry: null });
     for (const m of r1.matches) {
       const diff = Math.abs(m.rating_a - m.rating_b);
       expect(m.start_points).toBe(Math.round((2 * diff) / 3));
@@ -95,7 +101,7 @@ describe("a 13-of-16 night, Random Draw, end to end", () => {
     expect(pub.body.competition?.name).toBe("Friday 11 Sep 2026");
   });
 
-  it("start, time limit, cancel start, complete with buy-backs (rules 12, O-3, O-5)", async () => {
+  it("start, time limit, cancel start, complete with buy-backs placed at once (rules 12, O-3, O-5, O-13)", async () => {
     let b = (await api.bracket(comp)).body;
     const m1 = find.match(b, 1);
     expect((await api.complete(m1.id, m1.a.entry_id, "declined")).status).toBe(409); // not started
@@ -111,19 +117,28 @@ describe("a 13-of-16 night, Random Draw, end to end", () => {
     const actions = (await api.adminActions(comp)).body.actions;
     expect(actions[0]).toMatchObject({ actor: "Gabriel", action: "cancel_start", details: { match: "M1" } });
 
-    // Three buy-backs, then no_slots for the fourth.
-    for (const n of [1, 2, 3]) {
-      b = (await api.bracket(comp)).body;
-      const r = await playMatch(find.match(b, n), "a", "bought_back");
-      expect(r.loser_decision).toBe("bought_back");
-      expect(r.buyback_match_number).toBeNull(); // Random Draw: unplaced until close
-    }
+    // Three buy-backs: the first takes the empty M8, the next two the seats beside the lone players.
+    const r1 = await playMatch(find.match(b, 1), "a", "bought_back");
+    expect(r1.loser_decision).toBe("bought_back");
+    expect(r1.buyback_match_number).toBeNull();
+    expect(r1.winner_to).toEqual({ kind: "awaiting", round: 2, match_number: null });
+    b = (await api.bracket(comp)).body;
+    expect(find.round(b, 1).awaiting.map((a) => a.number)).toEqual([7, 8]);
+    const r2 = await playMatch(find.match(b, 2), "a", "bought_back");
+    expect([7, 8]).toContain(r2.buyback_match_number);
+    expect(r2.winner_to).toEqual({ kind: "match", round: 2, match_number: 9 });
+    b = (await api.bracket(comp)).body;
+    expect(find.match(b, 9).round).toBe(2);
+    const r3 = await playMatch(find.match(b, 3), "a", "bought_back");
+    expect(r3.buyback_match_number).toBe(r2.buyback_match_number === 7 ? 8 : 7);
     b = (await api.bracket(comp)).body;
     expect(b.competition?.open_slots).toBe(0);
-    expect(find.round(b, 1).waiting).toHaveLength(4); // Gus + 3 unplaced buy-backs
+    expect(find.round(b, 1).matches).toHaveLength(8);
+    expect(find.round(b, 1).waiting).toHaveLength(0);
     const r4 = await playMatch(find.match(b, 4), "a", "bought_back");
     expect(r4.loser_decision).toBe("no_slots");
     expect(r4.no_slots).toBe(true);
+    expect(r4.winner_to.match_number).toBe(10);
     // Missing decision → 400 and nothing changes.
     b = (await api.bracket(comp)).body;
     const m5 = find.match(b, 5);
@@ -133,35 +148,30 @@ describe("a 13-of-16 night, Random Draw, end to end", () => {
     expect((await api.complete(m5.id, m5.a.entry_id, "declined")).status).toBe(200);
   });
 
-  it("Force Pair pairs two waiting players; the last first-draw result auto-closes and places the rest (spec 5.3, 5.5)", async () => {
+  it("Force Pair has nobody to pair; the last first-draw result auto-closes the window (spec 5.3, 5.5)", async () => {
     let b = (await api.bracket(comp)).body;
-    const fp = await api.forcePair(comp);
-    expect(fp.status).toBe(200);
-    expect(fp.body.match_number).toBeGreaterThanOrEqual(7);
-    b = fp.body.bracket;
-    expect(find.round(b, 1).waiting).toHaveLength(2);
-    const forced = find.match(b, fp.body.match_number);
-    expect(forced.origin).toBe("force_pair");
-    let r6 = await playMatch(find.match(b, 6), "a", "declined");
-    if (forced.a.source === "draw" || forced.b.source === "draw") {
-      // The pick included the first-draw waiter, so that match holds the window open until it is played.
-      // Let the first-draw player win, so the loser is a buy-back and no decision is asked.
-      expect(r6.auto_closed).toBe(false);
-      r6 = await playMatch(forced, forced.a.source === "draw" ? "a" : "b");
-    }
-    expect(r6.auto_closed).toBe(true);
-    expect(r6.free_passes).toBe(0); // the 2 left waiting were placed together into the remaining pair
+    expect((await api.forcePair(comp)).status).toBe(409);
+    const r6 = await playMatch(find.match(b, 6), "a", "declined");
+    expect(r6.auto_closed).toBe(false); // M7 still holds a first-draw player
+    b = (await api.bracket(comp)).body;
+    expect(find.match(b, 11).round).toBe(2); // M5, M6 winners
+    const m7 = find.match(b, 7);
+    const r7 = await playMatch(m7, m7.a.source === "draw" ? "a" : "b");
+    expect(r7.auto_closed).toBe(true);
+    expect(r7.free_passes).toBe(0); // everyone in round one has an opponent
     b = (await api.bracket(comp)).body;
     expect(b.competition?.buybacks_open).toBe(false);
-    expect(find.round(b, 1).matches).toHaveLength(8);
-    expect(find.round(b, 1).waiting).toHaveLength(0);
     expect((await api.forcePair(comp)).status).toBe(409);
     expect((await api.closeBuybacks(comp)).status).toBe(409);
+    await playMatch(find.match(b, 8), "a");
+    b = (await api.bracket(comp)).body;
+    expect(find.matchesInRound(b, 2).map((m) => m.number)).toEqual([9, 10, 11, 12]);
+    expect(b.competition?.current_round).toBe(2);
   });
 
-  it("correction pulls a winner back; then the night plays to a winner with at most one free pass per later round", async () => {
+  it("correction pulls a winner back; then the night plays up the tree to M15 with no free pass", async () => {
     let b = (await api.bracket(comp)).body;
-    // M5's loser declined, so nothing downstream depends on that result: the correction is allowed.
+    // M5's loser declined and M11 has not started, so the correction is allowed.
     const m5 = find.match(b, 5);
     expect(m5.correction_blocked).toBeNull();
     const newWinner = m5.winner_id === m5.a.entry_id ? m5.b.entry_id : m5.a.entry_id;
@@ -172,22 +182,20 @@ describe("a 13-of-16 night, Random Draw, end to end", () => {
     b = c.body.bracket;
     expect(find.match(b, 5).winner_id).toBe(newWinner);
     expect(find.match(b, 5).corrected_at).not.toBeNull();
-    expect(find.match(b, 5).loser_id).not.toBe(newWinner);
+    expect([find.match(b, 11).a.entry_id, find.match(b, 11).b.entry_id]).toContain(newWinner);
     expect(b.competition?.open_slots).toBe(0);
-    // A match whose loser is in a started buy-back match cannot be corrected (O-6).
-    const locked = find.round(b, 1).matches.filter((m) => m.correction_blocked?.includes("buy-back match"));
-    expect(locked.length).toBeGreaterThanOrEqual(0);
 
-    // Finish round one and the rest of the night.
     b = await playCurrentRound(comp);
-    expect(b.competition?.current_round).toBe(2);
-    while (b.competition?.status === "in_progress") {
-      const r = b.competition.current_round;
-      expect(find.round(b, r).free_passes.length).toBeLessThanOrEqual(1);
-      b = await playCurrentRound(comp);
-    }
+    expect(find.matchesInRound(b, 3).map((m) => m.number)).toEqual([13, 14]);
+    b = await playCurrentRound(comp);
+    expect(find.matchesInRound(b, 4).map((m) => m.number)).toEqual([15]);
+    b = await playCurrentRound(comp);
     expect(b.competition?.status).toBe("complete");
     expect(b.competition?.winner).not.toBeNull();
+    expect(b.rounds.flatMap((r) => r.free_passes)).toHaveLength(0);
+    // The tree view has every box filled.
+    expect(b.rounds.map((r) => r.boxes.length)).toEqual([8, 4, 2, 1]);
+    expect(b.rounds.every((r) => r.boxes.every((x) => x.match !== null))).toBe(true);
     // Every round-two result is locked now: the winners' next matches have been played.
     const r2 = find.matchesInRound(b, 2)[0];
     expect(r2.correction_blocked).toMatch(/Result locked/);

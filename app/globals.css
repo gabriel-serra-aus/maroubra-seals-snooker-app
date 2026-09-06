@@ -431,3 +431,190 @@ ul.plain li {
   flex-wrap: wrap;
   gap: 12px 18px;
 }
+
+/* Pending action: the card acted on goes read-only until the server answers (spec 3.4) */
+.match.pending {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.match .saving {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* List | Tree toggle */
+.toggle {
+  display: inline-flex;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.toggle button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 6px 12px;
+  border: 0;
+  background: var(--card);
+  color: var(--accent);
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.toggle button.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Tree view (spec 3.4, 3.8) */
+.tree-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 8px -12px;
+  padding: 0 12px;
+}
+
+svg.tree {
+  display: block;
+  font: 12px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.tree-head {
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tree-lines {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+.tree-box rect {
+  fill: var(--card);
+  stroke: var(--line);
+}
+
+.tree-box rect.edge {
+  fill: var(--line);
+  stroke: none;
+}
+
+.tree-box.in_play rect {
+  fill: var(--green-bg);
+}
+
+.tree-box.in_play rect.edge {
+  fill: var(--green);
+}
+
+.tree-box.finished rect {
+  fill: var(--red-bg);
+}
+
+.tree-box.finished rect.edge {
+  fill: var(--red);
+}
+
+.tree-box.awaiting rect.edge {
+  fill: var(--amber);
+}
+
+.tree-box.pass rect {
+  stroke-dasharray: 4 3;
+}
+
+.tree-box.pass rect.edge {
+  fill: var(--accent);
+}
+
+.tree-box.winner rect {
+  fill: var(--accent-bg);
+  stroke: var(--accent);
+}
+
+.tree-box.empty rect {
+  stroke-dasharray: 2 3;
+}
+
+.tree-name {
+  fill: var(--fg);
+  font-size: 12.5px;
+}
+
+.tree-name.winner {
+  font-weight: 700;
+}
+
+.tree-name.loser {
+  fill: var(--muted);
+}
+
+.tree-rating,
+.tree-sub,
+.tree-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.tree-label {
+  text-anchor: end;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.tree-tag {
+  fill: var(--amber);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Club badge */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0 4px;
+}
+
+.brand.center {
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  margin-top: 24px;
+}
+
+.brand h1 {
+  margin: 0;
+}
+
+.logo-lg {
+  width: 72px;
+  height: 72px;
+}
+
+.brand.center .logo-lg {
+  width: 140px;
+  height: 140px;
+}
+
+.logo-sm {
+  width: 32px;
+  height: 32px;
+  vertical-align: middle;
+}
+
+.topbar nav .logo-link {
+  margin-right: 6px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.topbar nav {
+  display: flex;
+  align-items: center;
+}

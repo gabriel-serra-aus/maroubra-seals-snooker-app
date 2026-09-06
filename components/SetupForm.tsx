@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { BracketPayload } from "@/lib/bracket/payload";
@@ -10,25 +11,15 @@ import { AddSheet, type ClubPlayer } from "./PlayersAdmin";
 
 export interface SetupDefaults {
   name: string;
-  rating_top_count: number;
-  rating_top_delta: number;
-  rating_bottom_count: number;
-  rating_bottom_delta: number;
 }
 
-/** Competition setup and draw (spec 3.3). */
+/** Competition setup and draw (spec 3.3). The time limit and rating scale live on the settings page (3.10). */
 export function SetupForm({ competition, players, defaults }: { competition: BracketPayload | null; players: ClubPlayer[]; defaults: SetupDefaults }) {
   const router = useRouter();
   const c = competition?.competition ?? null;
   const [form, setForm] = useState({
     name: c?.name ?? defaults.name,
     bracket_size: c?.bracket_size ?? 16,
-    buyback_mode: c?.buyback_mode ?? "random_draw",
-    default_time_limit_minutes: c?.default_time_limit_minutes ?? 25,
-    rating_top_count: c?.rating_top_count ?? defaults.rating_top_count,
-    rating_top_delta: c?.rating_top_delta ?? defaults.rating_top_delta,
-    rating_bottom_count: c?.rating_bottom_count ?? defaults.rating_bottom_count,
-    rating_bottom_delta: c?.rating_bottom_delta ?? defaults.rating_bottom_delta,
   });
   const [clubPlayers, setClubPlayers] = useState(players);
   const [adding, setAdding] = useState(false);
@@ -38,7 +29,6 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
   const n = entries.length;
   const B = form.bracket_size;
 
-  const num = (v: string) => (v.trim() === "" || Number.isNaN(Number(v)) ? undefined : Number(v));
   const update = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setForm((f) => ({ ...f, [key]: value }));
     if (c) {
@@ -101,28 +91,13 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
             </label>
           ))}
         </div>
-        <div className="field">
-          <span className="muted small">Buy-back mode</span>
-          <label className="radio"><input type="radio" checked={form.buyback_mode === "random_draw"} onChange={() => update("buyback_mode", "random_draw")} /> Random Draw (default) — buy-backs are paired in one go when the window closes</label>
-          <label className="radio"><input type="radio" checked={form.buyback_mode === "sequential"} onChange={() => update("buyback_mode", "sequential")} /> Sequential Pairing — a match forms as soon as two are waiting</label>
-        </div>
-        <label className="field">
-          <span>Match time limit (minutes)</span>
-          <input className="inline" type="number" min={1} max={180} value={form.default_time_limit_minutes} onChange={(e) => setForm((f) => ({ ...f, default_time_limit_minutes: Number(e.target.value) }))} onBlur={(e) => num(e.target.value) !== undefined && update("default_time_limit_minutes", Number(e.target.value))} />
-        </label>
-        <div className="field">
-          <span className="muted small">Rating adjustment (applied on the review after the night)</span>
-          <div className="row">
-            Top <input className="inline" type="number" min={0} value={form.rating_top_count} onChange={(e) => setForm((f) => ({ ...f, rating_top_count: Number(e.target.value) }))} onBlur={(e) => update("rating_top_count", Number(e.target.value))} /> finishers
-            <input className="inline" type="number" value={form.rating_top_delta} onChange={(e) => setForm((f) => ({ ...f, rating_top_delta: Number(e.target.value) }))} onBlur={(e) => update("rating_top_delta", Number(e.target.value))} /> each
-          </div>
-          <div className="row" style={{ marginTop: 6 }}>
-            Bottom <input className="inline" type="number" min={0} value={form.rating_bottom_count} onChange={(e) => setForm((f) => ({ ...f, rating_bottom_count: Number(e.target.value) }))} onBlur={(e) => update("rating_bottom_count", Number(e.target.value))} /> finishers
-            <input className="inline" type="number" value={form.rating_bottom_delta} onChange={(e) => setForm((f) => ({ ...f, rating_bottom_delta: Number(e.target.value) }))} onBlur={(e) => update("rating_bottom_delta", Number(e.target.value))} /> each
-          </div>
-          <p className="muted small">A good night brings your number down (−1), a bad night puts it up (+2).</p>
-        </div>
-        {!c && <button className="btn primary wide" disabled={busy} onClick={create}>Set up tonight&apos;s competition</button>}
+        {c && (
+          <p className="muted small">
+            Match time limit: <strong>{c.default_time_limit_minutes} min</strong>. Rating adjustment: top {c.rating_top_count} by {c.rating_top_delta}, bottom {c.rating_bottom_count} by +{c.rating_bottom_delta}.{" "}
+            <Link href="/admin/settings">Change ›</Link>
+          </p>
+        )}
+        {!c && <button className="btn primary wide" disabled={busy} onClick={create}>{busy ? "Saving…" : "Set up tonight's competition"}</button>}
       </div>
       {error && <div className="error" onClick={() => setError(null)}>{error}</div>}
       {c && (
@@ -143,12 +118,15 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
             <strong>{n} player{n === 1 ? "" : "s"}</strong> → {matches} match{matches === 1 ? "" : "es"}{waiting ? ", 1 waiting player" : ""}, {open} open slot{open === 1 ? "" : "s"} for buy-backs
           </p>
           {n > B && <div className="error">More players than slots — choose the 32 bracket.</div>}
-          <button className="btn primary wide" disabled={busy || n < 2 || n > B} onClick={start}>Start Competition</button>
+          <button className="btn primary wide" disabled={busy || n < 2 || n > B} onClick={start}>{busy ? "Saving…" : "Start Competition"}</button>
           <p className="small" style={{ marginTop: 16 }}>
             <a href="#" style={{ color: "var(--red)" }} onClick={(e) => { e.preventDefault(); abandonSetup(); }}>Discard this setup</a>
           </p>
         </>
       )}
+      <p className="footer-links small">
+        <Link href="/admin/settings">Settings ›</Link>
+      </p>
       {adding && (
         <AddSheet
           onClose={() => setAdding(false)}

@@ -1,14 +1,14 @@
-// Row shapes mirror supabase/migrations/0001_init.sql (spec 6). The logic works on a Snapshot of one
-// competition and mutates a clone of it; lib/db/apply.ts diffs before/after and writes the changes.
+// Row shapes mirror supabase/migrations (spec 6). The logic works on a Snapshot of one competition and
+// mutates a clone of it; lib/db/apply.ts diffs before/after and writes the changes.
 
 import type { Rng } from "./random";
 
 export type MatchState = "not_started" | "in_play" | "finished";
 export type CompetitionStatus = "setup" | "in_progress" | "complete" | "abandoned";
-export type BuybackMode = "random_draw" | "sequential";
 export type EntrySource = "draw" | "buyback";
 export type BuybackDecision = "bought_back" | "declined" | "no_slots";
-export type MatchOrigin = "draw" | "sequential" | "force_pair" | "close" | "round_draw" | "correction" | "override";
+/** How a match came to exist: the draw, a buy-back placement, Force Pair, a close, advancement up the tree, a correction, an override. */
+export type MatchOrigin = "draw" | "placement" | "force_pair" | "close" | "advance" | "correction" | "override";
 export type BracketSize = 16 | 32;
 
 export interface PlayerRow {
@@ -23,7 +23,6 @@ export interface CompetitionRow {
   name: string;
   status: CompetitionStatus;
   bracket_size: BracketSize;
-  buyback_mode: BuybackMode;
   default_time_limit_minutes: number;
   rating_top_count: number;
   rating_top_delta: number;
@@ -42,6 +41,7 @@ export interface EntryRow {
   competition_id: string;
   player_id: string;
   source: EntrySource;
+  /** Round-one slot 1..bracket_size. Fixes the player's place in the whole tree (spec 5.4, O-14). */
   slot: number | null;
   buyback_seq: number | null;
   rebuy_of_entry_id: string | null;

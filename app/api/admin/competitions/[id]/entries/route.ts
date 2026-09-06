@@ -18,5 +18,16 @@ export const POST = handle(async (request, { params }) => {
     if (s.competition.status === "in_progress") return addLateArrival(s, ctx, playerId);
     throw conflict("This competition is over");
   });
-  return json({ ok: true, entry_id: r.result.entry.id, match_number: r.result.match?.number ?? null, bracket: r.bracket }, { status: 201 });
+  const slot = r.result.entry.slot;
+  return json(
+    {
+      ok: true,
+      entry_id: r.result.entry.id,
+      match_number: r.result.match?.number ?? null,
+      // Placed but alone: the match position they wait in (spec 5.2).
+      awaiting_in: r.result.match || slot === null ? null : Math.ceil(slot / 2),
+      bracket: r.bracket,
+    },
+    { status: 201 },
+  );
 });

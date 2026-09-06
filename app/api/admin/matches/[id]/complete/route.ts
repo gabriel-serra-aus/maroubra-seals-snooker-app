@@ -2,7 +2,7 @@
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { mutateCompetition } from "@/lib/api/mutate";
-import { competitionIdOfMatch, completeResponse } from "@/lib/api/routes";
+import { completeResponse } from "@/lib/api/routes";
 import { optionalEnum, requiredUuid } from "@/lib/api/validate";
 import { completeMatch } from "@/lib/logic/matchControl";
 
@@ -12,7 +12,6 @@ export const POST = handle(async (request, { params }) => {
   const body = await readJson(request);
   const winner = requiredUuid(body, "winner_entry_id");
   const decision = optionalEnum(body, "loser_decision", ["bought_back", "declined"] as const);
-  const competitionId = await competitionIdOfMatch(id);
-  const r = await mutateCompetition(session, { competitionId }, (s, ctx) => completeMatch(s, ctx, id, winner, decision));
+  const r = await mutateCompetition(session, { matchId: id }, (s, ctx) => completeMatch(s, ctx, id, winner, decision));
   return json({ ...completeResponse(r.result), bracket: r.bracket });
 });

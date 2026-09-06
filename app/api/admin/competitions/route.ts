@@ -4,7 +4,7 @@ import { createCompetition, listCompetitions, previousRatingSettings } from "@/l
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { defaultCompetitionName } from "@/lib/api/routes";
-import { optionalEnum, optionalInt, optionalString } from "@/lib/api/validate";
+import { optionalInt, optionalString } from "@/lib/api/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,6 @@ export const POST = handle(async (request) => {
     createCompetition(tx, {
       name: optionalString(body, "name", 80) || defaultCompetitionName(),
       bracket_size: size,
-      buyback_mode: optionalEnum(body, "buyback_mode", ["random_draw", "sequential"] as const) ?? "random_draw",
       default_time_limit_minutes: optionalInt(body, "default_time_limit_minutes", 1, 180) ?? 25,
       rating: {
         rating_top_count: optionalInt(body, "rating_top_count", 0, 64) ?? prev.rating_top_count,

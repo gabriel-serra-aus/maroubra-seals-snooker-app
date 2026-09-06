@@ -1,13 +1,18 @@
 // The bracket JSON (spec 7.2) built from a Snapshot. Public and admin routes and the pages all use it.
 
 import {
+  boxOf,
+  boxOfMatch,
   buybacksOpen,
   currentRound,
-  halfFullPairs,
+  lastRound,
+  loneWaiters,
   matchLabel,
+  matchNumberFor,
   opponentOf,
   openSlots,
   positionOf,
+  roundsFor,
   waitingEntries,
   type Position,
 } from "@/lib/logic/derive";
@@ -52,13 +57,25 @@ export interface MatchView {
   correction_blocked: string | null;
 }
 
+/** One position of the fixed tree (spec 5.4): a match, a lone player, a free-pass holder passing through, or nothing yet. */
+export interface BoxView {
+  k: number;
+  number: number;
+  match: MatchView | null;
+  /** The lone player waiting here, or the player who passed through this box on a free pass. */
+  entry: EntryView | null;
+  free_pass: boolean;
+}
+
 export interface RoundView {
   round: number;
   matches: MatchView[];
-  /** Round-one slot pairs with one player: "awaiting opponent". */
+  /** Slot pairs (round one) or boxes (later rounds) with one player: "awaiting opponent". */
   awaiting: Array<{ number: number; slot: number; entry: EntryView }>;
   waiting: EntryView[];
   free_passes: Array<{ id: string; entry: EntryView }>;
+  /** Every box of the round in order, for the tree view. */
+  boxes: BoxView[];
 }
 
 export interface BracketPayload {
@@ -68,7 +85,7 @@ export interface BracketPayload {
     name: string;
     status: string;
     bracket_size: number;
-    buyback_mode: string;
+    rounds_total: number;
     default_time_limit_minutes: number;
     rating_top_count: number;
     rating_top_delta: number;
@@ -81,8 +98,6 @@ export interface BracketPayload {
     buybacks_open: boolean;
     open_slots: number;
     winner: EntryView | null;
-    /** Players left waiting in a finished round who block the next draw (override screen work). */
-    draw_blocked_by: EntryView[];
   };
   rounds: RoundView[];
   /** Every entry tonight with where it stands (the override screen lists these). */
@@ -96,6 +111,7 @@ const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 export function buildBracketPayload(s: Snapshot | null, now = new Date()): BracketPayload {
   if (!s || s.competition.status === "abandoned") return { server_now: now.toISOString(), competition: null, rounds: [], entries: [], players: [] };
   const c = s.competition;
+  const B = c.bracket_size;
   const view = (entryId: string): EntryView => {
     const e = s.entries.find((x) => x.id === entryId)!;
     const p = s.players.find((x) => x.id === e.player_id);
@@ -112,60 +128,72 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       position: positionOf(s, e.id),
     };
   };
-  const round = currentRound(s);
-  // Players can be waiting in a round beyond the last match (its only match was deleted): show that round too.
-  let lastRound = round;
-  for (const e of s.entries) {
-    const p = positionOf(s, e.id);
-    if (p.status === "waiting" && c.status === "in_progress") lastRound = Math.max(lastRound, p.round);
-  }
+  const matchView = (m: Snapshot["matches"][number]): MatchView => ({
+    id: m.id,
+    round: m.round,
+    number: m.number,
+    label: matchLabel(m),
+    state: m.state,
+    origin: m.origin,
+    a: view(m.player_a_id),
+    b: view(m.player_b_id),
+    rating_a: m.rating_a,
+    rating_b: m.rating_b,
+    start_points: m.start_points,
+    start_entry_id: m.start_entry_id,
+    time_limit_minutes: m.time_limit_minutes ?? c.default_time_limit_minutes,
+    has_own_time_limit: m.time_limit_minutes !== null,
+    started_at: iso(m.started_at),
+    finished_at: iso(m.finished_at),
+    winner_id: m.winner_id,
+    loser_id: m.winner_id ? opponentOf(m, m.winner_id) : null,
+    corrected_at: iso(m.corrected_at),
+    correction_blocked: m.state === "finished" ? correctionBlockedReason(s, m) : null,
+  });
+  const inProgress = c.status === "in_progress";
+  const R = roundsFor(B);
+  const shown = c.status === "setup" ? 1 : lastRound(s);
   const rounds: RoundView[] = [];
-  for (let r = 1; r <= lastRound; r++) {
+  for (let r = 1; r <= shown; r++) {
+    const matches = s.matches
+      .filter((m) => m.round === r)
+      .sort((x, y) => x.number - y.number)
+      .map(matchView);
+    const passes = s.freePasses.filter((fp) => fp.from_round === r);
+    const lone = inProgress ? loneWaiters(s, r) : [];
+    const boxes: BoxView[] = [];
+    for (let k = 1; k <= B / 2 ** r; k++) {
+      const m = matches.find((x) => boxOfMatch(B, { number: x.number, round: r } as Snapshot["matches"][number]) === k) ?? null;
+      const pass = passes.find((fp) => {
+        const slot = s.entries.find((e) => e.id === fp.entry_id)?.slot;
+        return slot != null && boxOf(slot, r) === k;
+      });
+      const waiter = lone.find((w) => boxOf(w.slot, r) === k);
+      boxes.push({
+        k,
+        number: matchNumberFor(B, r, k),
+        match: m,
+        entry: m ? null : pass ? view(pass.entry_id) : waiter ? view(waiter.entry.id) : null,
+        free_pass: !m && !!pass,
+      });
+    }
     rounds.push({
       round: r,
-      matches: s.matches
-        .filter((m) => m.round === r)
-        .sort((x, y) => x.number - y.number)
-        .map((m) => ({
-          id: m.id,
-          round: m.round,
-          number: m.number,
-          label: matchLabel(m),
-          state: m.state,
-          origin: m.origin,
-          a: view(m.player_a_id),
-          b: view(m.player_b_id),
-          rating_a: m.rating_a,
-          rating_b: m.rating_b,
-          start_points: m.start_points,
-          start_entry_id: m.start_entry_id,
-          time_limit_minutes: m.time_limit_minutes ?? c.default_time_limit_minutes,
-          has_own_time_limit: m.time_limit_minutes !== null,
-          started_at: iso(m.started_at),
-          finished_at: iso(m.finished_at),
-          winner_id: m.winner_id,
-          loser_id: m.winner_id ? opponentOf(m, m.winner_id) : null,
-          corrected_at: iso(m.corrected_at),
-          correction_blocked: m.state === "finished" ? correctionBlockedReason(s, m) : null,
-        })),
-      awaiting: r === 1 && c.status === "in_progress" ? halfFullPairs(s).map((h) => ({ number: h.number, slot: h.slot, entry: view(h.entry.id) })) : [],
-      waiting: c.status === "in_progress" ? waitingEntries(s, r).map((e) => view(e.id)) : [],
-      free_passes: s.freePasses.filter((fp) => fp.from_round === r).map((fp) => ({ id: fp.id, entry: view(fp.entry_id) })),
+      matches,
+      awaiting: lone.map((h) => ({ number: h.number, slot: h.slot, entry: view(h.entry.id) })),
+      waiting: inProgress ? waitingEntries(s, r).map((e) => view(e.id)) : [],
+      free_passes: passes.map((fp) => ({ id: fp.id, entry: view(fp.entry_id) })),
+      boxes,
     });
   }
-  // From round two, waiting players in a finished round block the next draw until the override pairs them
-  // or grants a free pass (round-one stragglers go through automatically at the draw, rules 11 / O-4).
-  const last = rounds[lastRound - 1];
-  const drawBlocked =
-    c.status === "in_progress" && lastRound >= 2 && last.matches.every((m) => m.state === "finished") ? last.waiting : [];
   return {
     server_now: now.toISOString(),
     competition: {
       id: c.id,
       name: c.name,
       status: c.status,
-      bracket_size: c.bracket_size,
-      buyback_mode: c.buyback_mode,
+      bracket_size: B,
+      rounds_total: R,
       default_time_limit_minutes: c.default_time_limit_minutes,
       rating_top_count: c.rating_top_count,
       rating_top_delta: c.rating_top_delta,
@@ -174,11 +202,10 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       started_at: iso(c.started_at),
       buybacks_closed_at: iso(c.buybacks_closed_at),
       completed_at: iso(c.completed_at),
-      current_round: round,
+      current_round: currentRound(s),
       buybacks_open: buybacksOpen(s),
       open_slots: openSlots(s),
       winner: c.winner_entry_id ? view(c.winner_entry_id) : null,
-      draw_blocked_by: drawBlocked,
     },
     rounds,
     entries: s.entries.map((e) => view(e.id)).sort((x, y) => x.name.localeCompare(y.name) || (x.buyback_seq ?? 0) - (y.buyback_seq ?? 0)),

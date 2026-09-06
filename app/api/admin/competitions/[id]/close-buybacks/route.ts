@@ -5,25 +5,20 @@ import { handle, json, readJson } from "@/lib/api/respond";
 import { mutateCompetition } from "@/lib/api/mutate";
 import { optionalBool } from "@/lib/api/validate";
 import { closeBuybacks } from "@/lib/logic/buybacks";
-import { maybeDrawNextRound } from "@/lib/logic/rounds";
 
 export const POST = handle(async (request, { params }) => {
   const session = requireAdmin(request);
   const { id } = await params;
   const body = await readJson(request);
   const dryRun = optionalBool(body, "dry_run") ?? false;
-  const r = await mutateCompetition(session, { competitionId: id, dryRun }, (s, ctx) => {
-    const close = closeBuybacks(s, ctx);
-    const draw = maybeDrawNextRound(s, ctx);
-    return { close, draw };
-  });
+  const r = await mutateCompetition(session, { competitionId: id, dryRun }, (s, ctx) => closeBuybacks(s, ctx));
   return json({
     ok: !dryRun,
     dry_run: dryRun,
-    free_passes: r.result.close.freePasses.length,
-    free_pass_names: r.result.close.freePasses.map((id) => r.after.players.find((p) => p.id === r.after.entries.find((e) => e.id === id)?.player_id)?.name ?? "?"),
-    matches_created: r.result.close.matchesCreated.map((m) => m.number),
-    round_drawn: r.result.draw?.round ?? null,
+    free_passes: r.result.freePasses.length,
+    free_pass_names: r.result.freePasses.map((id) => r.after.players.find((p) => p.id === r.after.entries.find((e) => e.id === id)?.player_id)?.name ?? "?"),
+    matches_created: r.result.matchesCreated.map((m) => m.number),
+    completed: r.after.competition.status === "complete",
     bracket: r.bracket,
   });
 });

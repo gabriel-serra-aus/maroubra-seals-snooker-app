@@ -5,7 +5,6 @@ import { autoCloseDue, closeBuybacks, createBuybackEntry, type CloseResult } fro
 import {
   buybackEntryOf,
   buybacksOpen,
-  currentRound,
   entryById,
   matchById,
   matchLabel,
@@ -13,7 +12,7 @@ import {
   opponentOf,
   removeMatch,
 } from "./derive";
-import { advanceWinner, maybeDrawNextRound, unwindAdvance, type RoundDrawResult } from "./rounds";
+import { advanceAll, advancementOf, unwindAdvance, type Advancement, type AdvanceResult } from "./rounds";
 import type { BuybackDecision, Ctx, EntryRow, MatchRow, Snapshot } from "./types";
 
 export type LoserDecision = Extract<BuybackDecision, "bought_back" | "declined">;
@@ -93,19 +92,25 @@ function applyLoserDecision(s: Snapshot, ctx: Ctx, m: MatchRow, loser: EntryRow,
   return { decision: "bought_back", buybackEntryId: entry.id, buybackMatch: match };
 }
 
-/** Automatic transitions that follow a result (spec 7.4): auto-close (5.3) then the round draw (5.4). */
-export function runAutomatics(s: Snapshot, ctx: Ctx, opts: { checkAutoClose: boolean }): { autoClose: CloseResult | null; draw: RoundDrawResult | null } {
+/** Automatic transitions that follow any write (spec 7.4): auto-close (5.3) then advancement (5.4). */
+export function runAutomatics(s: Snapshot, ctx: Ctx, opts: { checkAutoClose: boolean } = { checkAutoClose: true }): { autoClose: CloseResult | null; advance: AdvanceResult } {
   let autoClose: CloseResult | null = null;
   if (opts.checkAutoClose && autoCloseDue(s)) autoClose = closeBuybacks(s, ctx);
-  const draw = maybeDrawNextRound(s, ctx);
-  return { autoClose, draw };
+  const advance = advanceAll(s, ctx);
+  if (autoClose) {
+    advance.matches.unshift(...autoClose.matchesCreated);
+    advance.freePasses.unshift(...autoClose.allPasses);
+  }
+  return { autoClose, advance };
 }
 
 export interface CompleteResult {
   match: MatchRow;
   loser: DecisionOutcome;
   autoClose: CloseResult | null;
-  draw: RoundDrawResult | null;
+  /** Where the winner went: their next match, awaiting an opponent, a free pass, or the night's winner. */
+  winnerTo: Advancement;
+  completed: boolean;
 }
 
 /** Complete (rules 12, spec 3.5): winner recorded, clock stopped, winner advanced, loser's decision applied. */
@@ -120,9 +125,8 @@ export function completeMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: 
   m.finished_at = ctx.now;
   m.winner_id = winnerId;
   const loserOutcome = applyLoserDecision(s, ctx, m, loser, decision);
-  advanceWinner(s, ctx, winnerId, m.round);
-  const auto = runAutomatics(s, ctx, { checkAutoClose: true });
-  return { match: m, loser: loserOutcome, ...auto };
+  const auto = runAutomatics(s, ctx);
+  return { match: m, loser: loserOutcome, autoClose: auto.autoClose, winnerTo: advancementOf(s, winnerId, m.round), completed: s.competition.status === "complete" };
 }
 
 /** Why Correct result is unavailable, or null when it is allowed (spec 5.7, O-6). */
@@ -153,8 +157,9 @@ function releaseBuyback(s: Snapshot, ctx: Ctx, loser: EntryRow): void {
 }
 
 /**
- * Correct result (rules 12, spec 5.7): pull the previous winner back, advance the new one into the same
- * place, undo the previous loser's buy-back if it has not started (O-6), take the new loser's decision.
+ * Correct result (rules 12, spec 5.7): pull the previous winner back out of the tree, record the new
+ * winner, undo the previous loser's buy-back if it has not started (O-6), take the new loser's decision,
+ * then let the advancement step move the new winner into the same place.
  */
 export function correctMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: string, decision?: LoserDecision): CompleteResult {
   const m = getMatch(s, matchId);
@@ -165,7 +170,6 @@ export function correctMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: s
   const prevWinner = m.winner_id;
   const prevLoser = entryById(s, opponentOf(m, prevWinner));
   if (winnerId !== prevWinner) validateDecision(s, m, entryById(s, prevWinner), decision);
-  const nextRoundDrawn = currentRound(s) > m.round;
   let loserOutcome: DecisionOutcome = { decision: prevLoser.buyback_decision, buybackEntryId: null, buybackMatch: null };
 
   if (winnerId === prevWinner) {
@@ -181,19 +185,14 @@ export function correctMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: s
       loserOutcome = applyLoserDecision(s, ctx, m, prevLoser, "bought_back");
     }
   } else {
-    const { deletedNumbers, freePassRounds } = unwindAdvance(s, ctx, prevWinner, m.round, { force: false });
+    unwindAdvance(s, ctx, prevWinner, m.round, { force: false });
     if (m.round === 1) releaseBuyback(s, ctx, prevLoser);
     prevLoser.buyback_decision = null;
     m.winner_id = winnerId;
     const newLoser = entryById(s, prevWinner);
     loserOutcome = applyLoserDecision(s, ctx, m, newLoser, decision);
-    advanceWinner(s, ctx, winnerId, m.round, {
-      reuseNumber: deletedNumbers[0],
-      nextRoundDrawn,
-      inheritFreePass: freePassRounds.includes(m.round + 1),
-    });
   }
   m.corrected_at = ctx.now;
-  const auto = runAutomatics(s, ctx, { checkAutoClose: true });
-  return { match: m, loser: loserOutcome, ...auto };
+  const auto = runAutomatics(s, ctx);
+  return { match: m, loser: loserOutcome, autoClose: auto.autoClose, winnerTo: advancementOf(s, winnerId, m.round), completed: s.competition.status === "complete" };
 }

@@ -14,9 +14,9 @@ function fullNight(extra: Partial<NightOpts> = {}) {
   for (let n = 1; n <= 6; n++) {
     play(s, ctx, n, strongerWins(s.matches.find((m) => m.number === n)!), buybacks++ < 3 ? "bought_back" : "declined");
   }
-  // Round one finished for first-draw players → auto-close placed the buy-backs (M8 and M7).
+  // The buy-backs went straight into M8 and M7; the window closes once M7 (with its first-draw player) is done.
+  while (s.competition.status === "in_progress") playRound(s, ctx, strongerWins);
   expect(s.competition.buybacks_closed_at).not.toBeNull();
-  while (s.competition.status === "in_progress") playRound(s, ctx, strongerWins, () => undefined);
   return { s, ctx };
 }
 
@@ -75,6 +75,7 @@ describe("rating adjustment (rules 13, O-1, spec 5.9)", () => {
     const id = (p: string) => s.entries.find((e) => e.player_id === p)!.id;
     Object.assign(s.matches[0], { player_a_id: id("p1"), player_b_id: id("p2") });
     Object.assign(s.matches[1], { player_a_id: id("p3"), player_b_id: id("p4") });
+    ["p1", "p2", "p3", "p4"].forEach((p, i) => (s.entries.find((e) => e.player_id === p)!.slot = i + 1));
     for (const m of s.matches) refreshStart(s, m);
     play(s, ctx, 1, id("p1"), "declined");
     play(s, ctx, 2, id("p3"), "declined");

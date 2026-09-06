@@ -118,6 +118,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
           <MatchRow key={m.id} m={m} waiting={waiting.filter((w) => w.position.round === m.round)} busy={busy} override={override} />
         ))}
         <h3>Pair two waiting players</h3>
+        <p className="muted small">From round two the two must share the same place in the tree (spec 5.4); in round one any two waiting players can be paired.</p>
         <div className="row">
           <select value={pairA} onChange={(e) => setPairA(e.target.value)} style={{ flex: 1 }}>
             <option value="">first…</option>
@@ -196,8 +197,9 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
           ))}
         </ul>
       )}
-      <p style={{ marginTop: 16 }}>
+      <p className="footer-links" style={{ marginTop: 16 }}>
         <Link href="/admin">‹ Bracket</Link>
+        <Link href="/admin/settings">Settings ›</Link>
       </p>
     </main>
   );
@@ -220,7 +222,7 @@ function MatchRow({ m, waiting, busy, override }: { m: MatchView; waiting: Entry
         <span>{m.label} <span className={`state ${m.state}`}>{stateIcon} {m.state.replace("_", " ")}</span> <span className="muted">R{m.round}</span></span>
         <span className="row">
           <button className="btn sm" disabled={busy || m.state === "not_started"} onClick={() => override(`Reset ${m.label} to not started`, "POST", `/api/admin/matches/${m.id}/override/reset`)}>Reset</button>
-          <button className="btn sm danger" disabled={busy} onClick={() => override(`Delete ${m.label}`, "DELETE", `/api/admin/matches/${m.id}/override`)}>Delete</button>
+          {m.round === 1 && <button className="btn sm danger" disabled={busy} onClick={() => override(`Delete ${m.label}`, "DELETE", `/api/admin/matches/${m.id}/override`)}>Delete</button>}
         </span>
       </div>
       <div className="small">{m.a.name}{m.winner_id === m.a.entry_id ? " ✔" : ""} v {m.b.name}{m.winner_id === m.b.entry_id ? " ✔" : ""}</div>
