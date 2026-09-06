@@ -96,7 +96,9 @@ export interface RoundDrawResult {
  * Round draw (spec 5.4). Runs after every write. When every match of the current round is finished, nobody
  * is left waiting in it (and, in round one, buy-backs are closed), the pool of winners plus free-pass
  * holders is shuffled and paired. An odd pool leaves one random free pass; a pool of one is the winner of
- * the night. A player an override left waiting blocks the draw until they are paired or given a free pass.
+ * the night. In round one, anyone left without an opponent after the close (a correction or an override
+ * can do that) goes through, per rules 11 / O-4. From round two a player an override left waiting blocks
+ * the draw until they are paired or given a free pass on the override screen.
  */
 export function maybeDrawNextRound(s: Snapshot, ctx: Ctx): RoundDrawResult | null {
   const c = s.competition;
@@ -105,7 +107,14 @@ export function maybeDrawNextRound(s: Snapshot, ctx: Ctx): RoundDrawResult | nul
   const roundMatches = s.matches.filter((m) => m.round === r);
   if (roundMatches.some((m) => m.state !== "finished")) return null;
   if (r === 1 && c.buybacks_closed_at === null) return null;
-  if (waitingEntries(s, r).length > 0) return null;
+  const waiting = waitingEntries(s, r);
+  if (r === 1) {
+    for (const e of waiting) {
+      s.freePasses.push({ id: ctx.newId(), competition_id: c.id, entry_id: e.id, from_round: 1, granted_at: ctx.now });
+    }
+  } else if (waiting.length > 0) {
+    return null;
+  }
   const pool = new Set<string>();
   for (const m of roundMatches) if (m.winner_id) pool.add(m.winner_id);
   for (const fp of s.freePasses) if (fp.from_round === r) pool.add(fp.entry_id);

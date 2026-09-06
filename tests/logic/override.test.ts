@@ -111,13 +111,12 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     const winner = s.entries.find((e) => e.id === m1.winner_id)!;
     const changes = overrideRemovePlayer(s, ctx, winner.player_id);
     expect(changes).toEqual(expect.arrayContaining(["M9 deleted", "M1 voided", "entry removed"]));
-    expect(s.matches.map((m) => m.number)).toEqual([2]);
+    expect(s.matches.filter((m) => m.round === 1).map((m) => m.number)).toEqual([2]);
     expect(s.entries.some((e) => e.id === winner.id)).toBe(false);
-    // The M1 loser is waiting again in slot pair 1 and blocks the round-two draw; the M2 winner waits in round 2.
-    expect(waitingEntries(s, 1)).toHaveLength(1);
-    expect(waitingEntries(s, 2)).toHaveLength(1);
-    // A free pass for the M1 loser unblocks it.
-    overrideGrantFreePass(s, ctx, waitingEntries(s, 1)[0].id, 1);
+    // Round one is closed and finished, so the M1 loser, now without an opponent, goes through (O-4)
+    // and round two is drawn: M1 loser v M2 winner.
+    expect(waitingEntries(s, 1)).toHaveLength(0);
+    expect(s.freePasses.filter((fp) => fp.from_round === 1)).toHaveLength(1);
     expect(s.matches.filter((m) => m.round === 2)).toHaveLength(1);
   });
 
