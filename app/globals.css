@@ -1,10 +1,11 @@
 :root {
-  --bg: #f6f5f2;
+  --bg: #f4f3ef;
   --fg: #1a1a1a;
   --muted: #666;
   --line: #d9d6cf;
   --card: #fff;
   --accent: #1f4e79;
+  --accent-bg: #e8f0f8;
   --green: #1e8e3e;
   --green-bg: #e6f4ea;
   --red: #c5221f;
@@ -15,6 +16,10 @@
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -29,7 +34,400 @@ a {
 }
 
 main {
-  max-width: 560px;
+  max-width: 600px;
   margin: 0 auto;
-  padding: 12px 12px 48px;
+  padding: 12px 12px 64px;
+}
+
+h1 {
+  font-size: 1.3rem;
+  margin: 8px 0;
+}
+
+h2 {
+  font-size: 1.05rem;
+  margin: 18px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+h3 {
+  font-size: 1rem;
+  margin: 12px 0 6px;
+}
+
+p {
+  margin: 6px 0;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.between {
+  justify-content: space-between;
+}
+
+.stack > * + * {
+  margin-top: 8px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+
+.topbar {
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.topbar .inner {
+  max-width: 600px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.topbar nav a {
+  margin-right: 10px;
+  font-size: 0.9rem;
+}
+
+/* Buttons */
+.btn {
+  display: inline-block;
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--accent);
+  cursor: pointer;
+  min-height: 40px;
+  text-decoration: none;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.btn.danger.primary {
+  background: var(--red);
+  color: #fff;
+}
+
+.btn.wide {
+  width: 100%;
+  text-align: center;
+  font-size: 1.05rem;
+  padding: 12px;
+}
+
+.btn.sm {
+  padding: 4px 8px;
+  min-height: 32px;
+  font-size: 0.85rem;
+}
+
+/* Forms */
+label.field {
+  display: block;
+  margin: 8px 0;
+}
+
+label.field span {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+select {
+  font: inherit;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  min-height: 44px;
+}
+
+input.inline {
+  width: 5.5em;
+  display: inline-block;
+  text-align: center;
+  padding: 6px;
+  min-height: 36px;
+}
+
+.radio {
+  display: block;
+  padding: 8px 4px;
+}
+
+.radio input {
+  margin-right: 8px;
+}
+
+.error {
+  color: var(--red);
+  background: var(--red-bg);
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.notice {
+  background: var(--amber-bg);
+  color: var(--amber);
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.info {
+  background: var(--accent-bg);
+  color: var(--accent);
+  padding: 8px 10px;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+/* Matches (rules 12 colours) */
+.match {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+
+.match.in_play {
+  border-left-color: var(--green);
+  background: var(--green-bg);
+}
+
+.match.finished {
+  border-left-color: var(--red);
+  background: var(--red-bg);
+}
+
+.match .head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.match .state {
+  letter-spacing: 0.03em;
+}
+
+.match .state.in_play {
+  color: var(--green);
+}
+
+.match .state.finished {
+  color: var(--red);
+}
+
+.match .timed-out {
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.match .player {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.match .player .name {
+  font-weight: 500;
+}
+
+.match .player.winner .name::before {
+  content: "✔ ";
+  color: var(--green);
+}
+
+.match .player.loser {
+  color: var(--muted);
+}
+
+.match .actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.awaiting {
+  border-left-color: var(--amber);
+}
+
+.tag {
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #eee;
+  color: #444;
+  white-space: nowrap;
+}
+
+.tag.buyback {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.tag.draw {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+details.round summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+/* Bottom sheet dialog */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sheet {
+  background: var(--card);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 14px 14px 0 0;
+  padding: 14px 14px 24px;
+}
+
+.sheet h2 {
+  margin-top: 0;
+}
+
+/* Timer view */
+.big-clock {
+  font-size: 4.2rem;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  border: 3px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  margin: 12px 0;
+  background: var(--card);
+}
+
+.big-clock.in_play {
+  border-color: var(--green);
+}
+
+.big-clock.timed-out {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.center {
+  text-align: center;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td,
+th {
+  text-align: left;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+th {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+ul.plain {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0;
+}
+
+ul.plain li {
+  padding: 4px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.footer-links {
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
 }

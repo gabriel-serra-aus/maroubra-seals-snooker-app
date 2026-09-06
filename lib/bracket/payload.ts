@@ -23,6 +23,8 @@ export interface EntryView {
   slot: number | null;
   buyback_seq: number | null;
   buyback_decision: BuybackDecision | null;
+  /** True when this player already has a buy-back entry tonight (so a draw-entry loser cannot buy back again). */
+  has_buyback_entry: boolean;
   position: Position;
 }
 
@@ -83,6 +85,8 @@ export interface BracketPayload {
     draw_blocked_by: EntryView[];
   };
   rounds: RoundView[];
+  /** Every entry tonight with where it stands (the override screen lists these). */
+  entries: EntryView[];
   /** Everyone with an entry tonight, by player, with their current rating. */
   players: Array<{ id: string; name: string; rating: number }>;
 }
@@ -90,7 +94,7 @@ export interface BracketPayload {
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
 export function buildBracketPayload(s: Snapshot | null, now = new Date()): BracketPayload {
-  if (!s || s.competition.status === "abandoned") return { server_now: now.toISOString(), competition: null, rounds: [], players: [] };
+  if (!s || s.competition.status === "abandoned") return { server_now: now.toISOString(), competition: null, rounds: [], entries: [], players: [] };
   const c = s.competition;
   const view = (entryId: string): EntryView => {
     const e = s.entries.find((x) => x.id === entryId)!;
@@ -104,6 +108,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       slot: e.slot,
       buyback_seq: e.buyback_seq,
       buyback_decision: e.buyback_decision,
+      has_buyback_entry: s.entries.some((x) => x.player_id === e.player_id && x.source === "buyback"),
       position: positionOf(s, e.id),
     };
   };
@@ -176,6 +181,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       draw_blocked_by: drawBlocked,
     },
     rounds,
+    entries: s.entries.map((e) => view(e.id)).sort((x, y) => x.name.localeCompare(y.name) || (x.buyback_seq ?? 0) - (y.buyback_seq ?? 0)),
     players: s.players
       .filter((p) => s.entries.some((e) => e.player_id === p.id))
       .map((p) => ({ id: p.id, name: p.name, rating: p.rating }))
