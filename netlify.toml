@@ -1,0 +1,5 @@
+[build]
+  command = "npm run build"
+
+[functions."ping"]
+  schedule = "0 3 * * *"
