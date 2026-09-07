@@ -1,10 +1,15 @@
+import { numberLabel } from "@/lib/logic/derive";
+
 const timeFmt = new Intl.DateTimeFormat("en-AU", { hour: "numeric", minute: "2-digit", timeZone: "Australia/Sydney" });
 const dateFmt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: "Australia/Sydney" });
 const dateTimeFmt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Australia/Sydney" });
+const dateShortFmt = new Intl.DateTimeFormat("en-AU", { day: "numeric", month: "short", timeZone: "Australia/Sydney" });
 
 export const fmtTime = (iso: string | null | undefined) => (iso ? timeFmt.format(new Date(iso)) : "");
 export const fmtDate = (iso: string | null | undefined) => (iso ? dateFmt.format(new Date(iso)) : "");
 export const fmtDateTime = (iso: string | null | undefined) => (iso ? dateTimeFmt.format(new Date(iso)) : "");
+/** Day and month only, for a column header (the history grid, spec 3.11). */
+export const fmtDateShort = (iso: string | null | undefined) => (iso ? dateShortFmt.format(new Date(iso)) : "");
 
 /** Ratings show their sign when negative; 0 stays 0. */
 export const fmtRating = (r: number) => (r < 0 ? `−${Math.abs(r)}` : String(r));
@@ -21,11 +26,11 @@ export interface WinnerTo {
   match_number: number | null;
 }
 
-export function describeWinnerTo(name: string, w: WinnerTo | undefined): string | null {
+export function describeWinnerTo(name: string, w: WinnerTo | undefined, bracketSize: number): string | null {
   if (!w) return null;
   switch (w.kind) {
     case "match":
-      return `${name} goes to M${w.match_number}.`;
+      return `${name} goes to ${numberLabel(bracketSize, w.match_number!)}.`;
     case "awaiting":
       return `${name} waits in round ${w.round} for an opponent.`;
     case "free_pass":

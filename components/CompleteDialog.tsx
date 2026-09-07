@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import type { BracketPayload, MatchView } from "@/lib/bracket/payload";
+import { Btn } from "./Btn";
 import { post } from "./client/api";
+import { numberLabel } from "@/lib/logic/derive";
 import { describeWinnerTo, fmtRating, type WinnerTo } from "./client/format";
 import { useAction } from "./client/hooks";
 
@@ -10,20 +12,18 @@ interface CompleteReply {
   loser_decision: string | null;
   no_slots: boolean;
   buyback_match_number: number | null;
-  auto_closed: boolean;
-  free_passes: number;
   winner_to: WinnerTo;
   completed: boolean;
   bracket: BracketPayload;
 }
 
-/** Complete match / correct result (spec 3.5). */
+/** Complete match / review result (spec 3.5): a dialog centred on the screen. */
 export function CompleteDialog({ m, b, mode, onClose, onSaved }: { m: MatchView; b: BracketPayload; mode: "complete" | "correct"; onClose: () => void; onSaved: (msg: string | null, bracket: BracketPayload) => void }) {
   const c = b.competition!;
   const [winner, setWinner] = useState<string>(mode === "correct" && m.winner_id ? m.winner_id : m.a.entry_id);
   const loser = winner === m.a.entry_id ? m.b : m.a;
   const winnerView = winner === m.a.entry_id ? m.a : m.b;
-  const eligible = m.round === 1 && loser.source === "draw" && c.buybacks_open && (!loser.has_buyback_entry || (mode === "correct" && loser.buyback_decision === "bought_back"));
+  const eligible = m.round === 1 && loser.source !== "buyback" && c.buybacks_open && (!loser.has_buyback_entry || (mode === "correct" && loser.buyback_decision === "bought_back"));
   const initialDecision = mode === "correct" && loser.buyback_decision === "bought_back" ? "bought_back" : c.open_slots > 0 ? "bought_back" : "declined";
   const [decision, setDecision] = useState<"bought_back" | "declined">(initialDecision);
   const { busy, error, run } = useAction();
@@ -36,12 +36,11 @@ export function CompleteDialog({ m, b, mode, onClose, onSaved }: { m: MatchView;
         loser_decision: eligible ? decision : undefined,
       });
       const notes: string[] = [];
-      const to = describeWinnerTo(winnerView.name, r.winner_to);
+      const to = describeWinnerTo(winnerView.name, r.winner_to, c.bracket_size);
       if (to) notes.push(to);
-      if (r.buyback_match_number) notes.push(`${loser.name} buys back into M${r.buyback_match_number}.`);
+      if (r.buyback_match_number) notes.push(`${loser.name} buys back into ${numberLabel(c.bracket_size, r.buyback_match_number)}.`);
       else if (r.loser_decision === "bought_back") notes.push(`${loser.name} buys back and awaits an opponent.`);
       if (r.no_slots) notes.push(`No open slots left — ${loser.name} is out.`);
-      if (r.auto_closed) notes.push(`Buy-backs closed automatically${r.free_passes ? ` · ${r.free_passes} free pass${r.free_passes > 1 ? "es" : ""}` : ""}.`);
       if (r.completed) notes.push("That was the final — the night is complete.");
       onSaved(notes.length ? notes.join(" ") : null, r.bracket);
     });
@@ -49,7 +48,9 @@ export function CompleteDialog({ m, b, mode, onClose, onSaved }: { m: MatchView;
   return (
     <div className="sheet-backdrop" onClick={busy ? undefined : onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()} aria-busy={busy}>
-        <h2>{mode === "complete" ? "Complete" : "Correct"} {m.label}</h2>
+        <h2>
+          {mode === "complete" ? "Complete" : "Review"} {m.label}
+        </h2>
         <h3>Winner</h3>
         {[m.a, m.b].map((e) => (
           <label key={e.entry_id} className="radio">
@@ -80,8 +81,8 @@ export function CompleteDialog({ m, b, mode, onClose, onSaved }: { m: MatchView;
         )}
         {error && <div className="error">{error}</div>}
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save result"}</button>
-          <button className="btn" disabled={busy} onClick={onClose}>Cancel</button>
+          <Btn className="primary" disabled={busy} pending={busy} onClick={save}>Save result</Btn>
+          <Btn disabled={busy} onClick={onClose}>Cancel</Btn>
         </div>
       </div>
     </div>

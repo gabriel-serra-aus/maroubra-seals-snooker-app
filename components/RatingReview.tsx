@@ -7,6 +7,7 @@ import type { ReviewRow } from "@/lib/logic/ratings";
 import { post } from "./client/api";
 import { fmtDate, fmtDelta, fmtRating } from "./client/format";
 import { useAction } from "./client/hooks";
+import { Btn } from "./Btn";
 
 export interface ReviewCompetition {
   id: string;
@@ -65,11 +66,13 @@ export function RatingReview({ competition, rows, others, signedInAs }: { compet
       });
       const r = await post<{ written: number }>(`/api/admin/competitions/${c.id}/rating-review`, { changes });
       setSaved(r.written);
-      router.refresh();
+      // The review is the last step of the night: what was saved is shown against this night in the
+      // history, so that is where the organiser goes next (spec 3.7, 3.11).
+      router.push(`/admin/history?night=${c.id}`);
     });
   const groupProps = { rows, values, setValues };
   return (
-    <main>
+    <main className="medium">
       <h1>Ratings · {c.name}</h1>
       <p className="muted small">
         Completed {fmtDate(c.completed_at)} · Scale: top {c.rating_top_count} {fmtDelta(c.rating_top_delta)} · bottom {c.rating_bottom_count} {fmtDelta(c.rating_bottom_delta)}
@@ -89,11 +92,13 @@ export function RatingReview({ competition, rows, others, signedInAs }: { compet
       <Group {...groupProps} title="Everyone else — unchanged unless you edit" group="none" empty="Nobody else took part." />
       <p className="muted small">Changed by {signedInAs} (signed in). Only players whose number differs from their current rating are written.</p>
       {error && <div className="error">{error}</div>}
-      {saved !== null && <div className="info">Saved {saved} rating change{saved === 1 ? "" : "s"}.</div>}
-      <button className="btn primary wide" disabled={busy} onClick={save}>Save rating changes</button>
-      <p style={{ marginTop: 16 }}>
+      {saved !== null && <div className="info">Saved {saved} rating change{saved === 1 ? "" : "s"}. Opening the history…</div>}
+      <Btn className="primary wide" disabled={busy} pending={busy} onClick={save}>Save rating changes</Btn>
+      <p className="muted small">Saving finishes the night and opens its page in the history.</p>
+      <div className="footer-links" style={{ marginTop: 16 }}>
         <Link href="/admin/setup">Set up the next competition ›</Link>
-      </p>
+        <Link href="/admin/history">History of past nights ›</Link>
+      </div>
     </main>
   );
 }

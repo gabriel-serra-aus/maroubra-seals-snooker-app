@@ -5,6 +5,8 @@ import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { defaultCompetitionName } from "@/lib/api/routes";
 import { optionalInt, optionalString } from "@/lib/api/validate";
+import { buildBracketPayload } from "@/lib/bracket/payload";
+import { loadSnapshot } from "@/lib/db/snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +23,9 @@ export const POST = handle(async (request) => {
   const prev = await previousRatingSettings(db);
   const size = optionalInt(body, "bracket_size", 16, 32) ?? 16;
   if (size !== 16 && size !== 32) return json({ error: "bracket_size must be 16 or 32" }, { status: 400 });
-  const competition = await db.transaction((tx) =>
-    createCompetition(tx, {
+  // The reply carries the (empty) bracket so the setup screen can show it without a second request.
+  const { competition, bracket } = await db.transaction(async (tx) => {
+    const competition = await createCompetition(tx, {
       name: optionalString(body, "name", 80) || defaultCompetitionName(),
       bracket_size: size,
       default_time_limit_minutes: optionalInt(body, "default_time_limit_minutes", 1, 180) ?? 25,
@@ -32,7 +35,8 @@ export const POST = handle(async (request) => {
         rating_bottom_count: optionalInt(body, "rating_bottom_count", 0, 64) ?? prev.rating_bottom_count,
         rating_bottom_delta: optionalInt(body, "rating_bottom_delta", -50, 50) ?? prev.rating_bottom_delta,
       },
-    }),
-  );
-  return json({ competition }, { status: 201 });
+    });
+    return { competition, bracket: buildBracketPayload(await loadSnapshot(tx, competition)) };
+  });
+  return json({ competition, bracket }, { status: 201 });
 });

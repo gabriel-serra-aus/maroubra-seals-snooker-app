@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Btn } from "./Btn";
 import { get, patch, post } from "./client/api";
 import { fmtDate, fmtRating } from "./client/format";
 import { useAction } from "./client/hooks";
@@ -45,7 +46,7 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
     </tr>
   );
   return (
-    <main>
+    <main className="medium">
       <h1>Players &amp; ratings</h1>
       <input type="search" placeholder="Search players…" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="row between" style={{ margin: "8px 0" }}>
@@ -96,7 +97,7 @@ function EditSheet({ p, signedInAs, onClose, onSaved }: { p: ClubPlayer; signedI
       await onSaved();
     });
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={busy ? undefined : onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <h2>{p.name}</h2>
         <label className="field">
@@ -115,8 +116,8 @@ function EditSheet({ p, signedInAs, onClose, onSaved }: { p: ClubPlayer; signedI
         <p className="muted small">Changed by {signedInAs} (signed in)</p>
         {error && <div className="error">{error}</div>}
         <div className="row">
-          <button className="btn primary" disabled={busy} onClick={save}>Save</button>
-          <button className="btn" disabled={busy} onClick={onClose}>Cancel</button>
+          <Btn className="primary" disabled={busy} pending={busy} onClick={save}>Save</Btn>
+          <Btn disabled={busy} onClick={onClose}>Cancel</Btn>
         </div>
         <h3>History</h3>
         {history === null ? (
@@ -154,7 +155,7 @@ export function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: (
       await onSaved(r.player);
     });
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop" onClick={busy ? undefined : onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <h2>Add player</h2>
         <label className="field">
@@ -167,8 +168,8 @@ export function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: (
         </label>
         {error && <div className="error">{error}</div>}
         <div className="row">
-          <button className="btn primary" disabled={busy} onClick={save}>Add</button>
-          <button className="btn" disabled={busy} onClick={onClose}>Cancel</button>
+          <Btn className="primary" disabled={busy} pending={busy} onClick={save}>Add</Btn>
+          <Btn disabled={busy} onClick={onClose}>Cancel</Btn>
         </div>
       </div>
     </div>

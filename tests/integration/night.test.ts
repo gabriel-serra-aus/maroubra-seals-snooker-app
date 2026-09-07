@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { resetDbForTests } from "@/lib/db/client";
+import { getDb, resetDbForTests } from "@/lib/db/client";
+import { competitionHistory } from "@/lib/db/history";
 import { api, find, loginAs, playCurrentRound, playMatch, setCookie } from "./api";
 
 const NAMES = ["Alice Chen", "Bob Smith", "Carl Diaz", "Dee Park", "Eve Long", "Fay Ng", "Gus Ray", "Hal Ito", "Ida Roy", "Ivan Poe", "Jo Kerr", "Kim Lau", "Lee Moss", "Max Bell", "Nia Ford", "Oli Hart", "Pat Quin"];
@@ -55,9 +56,21 @@ describe("a 13-of-16 night, end to end", () => {
     expect(c.status).toBe(201);
     expect(c.body.competition).toMatchObject({ bracket_size: 16, rating_top_count: 3, rating_bottom_delta: 2 });
     comp = c.body.competition.id;
+    expect(c.body.bracket.competition?.id).toBe(comp); // the setup screen shows the reply, no second request
     expect((await api.createCompetition()).status).toBe(409); // one live competition at a time
-    for (const n of NAMES.slice(0, 13)) expect((await api.addEntry(comp, { player_id: ids[n] })).status).toBe(201);
+    // Several players in one request (spec 3.3), then two removed at once, then the rest one by one.
+    const batch = await api.addEntries(comp, NAMES.slice(0, 10).map((n) => ids[n]));
+    expect(batch.status).toBe(201);
+    expect(batch.body.entry_ids).toHaveLength(10);
+    expect(batch.body.bracket.entries).toHaveLength(10);
+    const drop = batch.body.bracket.entries.filter((e) => e.name === "Ida Roy" || e.name === "Ivan Poe").map((e) => e.entry_id);
+    const removed = await api.removeEntries(comp, drop);
+    expect(removed.status).toBe(200);
+    expect(removed.body.bracket.entries).toHaveLength(8);
+    expect((await api.addEntries(comp, ["not-an-id"])).status).toBe(400);
+    for (const n of NAMES.slice(8, 13)) expect((await api.addEntry(comp, { player_id: ids[n] })).status).toBe(201);
     expect((await api.addEntry(comp, { player_id: ids["Alice Chen"] })).status).toBe(409);
+    expect((await api.addEntries(comp, [ids["Alice Chen"]])).status).toBe(409);
     const b = (await api.getCompetition(comp)).body;
     expect(b.competition?.status).toBe("setup");
     expect(b.competition?.open_slots).toBe(3);
@@ -115,7 +128,7 @@ describe("a 13-of-16 night, end to end", () => {
     expect(cancel.status).toBe(200);
     expect(find.match(cancel.body.bracket, 1)).toMatchObject({ state: "not_started", started_at: null, time_limit_minutes: 25 });
     const actions = (await api.adminActions(comp)).body.actions;
-    expect(actions[0]).toMatchObject({ actor: "Gabriel", action: "cancel_start", details: { match: "M1" } });
+    expect(actions[0]).toMatchObject({ actor: "Gabriel", action: "cancel_start", details: { match: "R1M1" } });
 
     // Three buy-backs: the first takes the empty M8, the next two the seats beside the lone players.
     const r1 = await playMatch(find.match(b, 1), "a", "bought_back");
@@ -148,18 +161,20 @@ describe("a 13-of-16 night, end to end", () => {
     expect((await api.complete(m5.id, m5.a.entry_id, "declined")).status).toBe(200);
   });
 
-  it("Force Pair has nobody to pair; the last first-draw result auto-closes the window (spec 5.3, 5.5)", async () => {
+  it("Force Pair has nobody to pair; the window outlives the last first-draw result until the organiser's tap (spec 5.3, 5.5, O-15)", async () => {
     let b = (await api.bracket(comp)).body;
     expect((await api.forcePair(comp)).status).toBe(409);
-    const r6 = await playMatch(find.match(b, 6), "a", "declined");
-    expect(r6.auto_closed).toBe(false); // M7 still holds a first-draw player
+    await playMatch(find.match(b, 6), "a", "declined");
     b = (await api.bracket(comp)).body;
     expect(find.match(b, 11).round).toBe(2); // M5, M6 winners
     const m7 = find.match(b, 7);
-    const r7 = await playMatch(m7, m7.a.source === "draw" ? "a" : "b");
-    expect(r7.auto_closed).toBe(true);
-    expect(r7.free_passes).toBe(0); // everyone in round one has an opponent
+    await playMatch(m7, m7.a.source === "draw" ? "a" : "b");
     b = (await api.bracket(comp)).body;
+    expect(b.competition?.buybacks_open).toBe(true); // nothing closes the window but the organiser
+    const close = await api.closeBuybacks(comp);
+    expect(close.status).toBe(200);
+    expect(close.body.free_passes).toBe(0); // everyone in round one has an opponent
+    b = close.body.bracket;
     expect(b.competition?.buybacks_open).toBe(false);
     expect((await api.forcePair(comp)).status).toBe(409);
     expect((await api.closeBuybacks(comp)).status).toBe(409);
@@ -229,5 +244,24 @@ describe("a 13-of-16 night, end to end", () => {
     await api.abandon(after.body.competition.id);
     // The public page still shows the completed night, not the abandoned ones.
     expect((await api.publicBracket()).body.competition?.id).toBe(comp);
+  });
+
+  it("history lists the night with its winner, who played, and the six rating changes (spec 3.11)", async () => {
+    const h = await competitionHistory(await getDb());
+    // Two abandoned nights sit above the completed one, newest first; the live night is not history.
+    expect(h.nights.map((n) => n.status)).toEqual(["abandoned", "abandoned", "complete"]);
+    const night = h.nights[2];
+    expect(night.id).toBe(comp);
+    expect(night.players).toBe(13);
+    expect(night.bracket_size).toBe(16);
+    const rv = await api.ratingReview(comp);
+    expect(night.winner_name).toBe(rv.body.rows[0].name);
+    expect(night.runner_up_name).toBe(rv.body.rows.find((r) => r.finish === "final")!.name);
+    const mine = h.changes.filter((c) => c.competition_id === comp);
+    expect(mine).toHaveLength(6);
+    expect(mine.every((c) => c.changed_by === "Gabriel" && c.old_rating !== null && c.new_rating !== c.old_rating)).toBe(true);
+    expect(mine.map((c) => c.new_rating - (c.old_rating ?? 0)).sort()).toEqual([-1, -1, -1, 2, 2, 2]);
+    expect(h.played.filter((p) => p.competition_id === comp)).toHaveLength(13);
+    expect(h.played.some((p) => p.competition_id !== comp)).toBe(false);
   });
 });

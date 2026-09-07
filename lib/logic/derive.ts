@@ -186,11 +186,33 @@ export function buybackEntryOf(s: Snapshot, playerId: string): EntryRow | undefi
   return s.entries.find((e) => e.player_id === playerId && e.source === "buyback");
 }
 
-export function drawEntryOf(s: Snapshot, playerId: string): EntryRow | undefined {
-  return s.entries.find((e) => e.player_id === playerId && e.source === "draw");
+/** The player's first-life entry tonight: from the draw or as a late arrival (rules 3). Not their buy-back. */
+export function firstEntryOf(s: Snapshot, playerId: string): EntryRow | undefined {
+  return s.entries.find((e) => e.player_id === playerId && e.source !== "buyback");
 }
 
-export const matchLabel = (m: MatchRow) => `M${m.number}`;
+// ---- Display names (spec 3.4). The stored match number stays positional (M1..M15); the screens show
+// the round and the match within it: R1M1 … R1M8, R2M1 … R2M4, R3M1, R3M2, and the last round as "Final".
+
+export const boxLabel = (bracketSize: number, round: number, k: number) =>
+  round === roundsFor(bracketSize) ? "Final" : `R${round}M${k}`;
+export const matchLabel = (s: Snapshot, m: MatchRow) => boxLabel(s.competition.bracket_size, m.round, boxOfMatch(s.competition.bracket_size, m));
+/** Round of a positional match number: 16 → 1..8 round one, 9..12 round two, 13..14, 15. */
+export function roundOfNumber(bracketSize: number, number: number): number {
+  let r = 1;
+  while (number > bracketSize - bracketSize / 2 ** r) r++;
+  return r;
+}
+/** Display name of a positional match number (the API replies carry numbers). */
+export function numberLabel(bracketSize: number, number: number): string {
+  const r = roundOfNumber(bracketSize, number);
+  return boxLabel(bracketSize, r, number - (bracketSize - bracketSize / 2 ** (r - 1)));
+}
+/** The round r−1 box whose winner a player waiting in box k of round r (from `slot`) is waiting for. */
+export function feederLabel(bracketSize: number, slot: number, round: number): string {
+  const j = boxOf(slot, round - 1);
+  return boxLabel(bracketSize, round - 1, j % 2 === 1 ? j + 1 : j - 1);
+}
 
 /** Removes a match row if it is still present (never splice(indexOf) — a miss would drop the last row). */
 export function removeMatch(s: Snapshot, m: MatchRow): void {

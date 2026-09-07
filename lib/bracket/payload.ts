@@ -1,6 +1,7 @@
 // The bracket JSON (spec 7.2) built from a Snapshot. Public and admin routes and the pages all use it.
 
 import {
+  boxLabel,
   boxOf,
   boxOfMatch,
   buybacksOpen,
@@ -9,6 +10,7 @@ import {
   loneWaiters,
   matchLabel,
   matchNumberFor,
+  numberLabel,
   opponentOf,
   openSlots,
   positionOf,
@@ -61,6 +63,8 @@ export interface MatchView {
 export interface BoxView {
   k: number;
   number: number;
+  /** Display name: R1M1 … or "Final" (spec 3.4). */
+  label: string;
   match: MatchView | null;
   /** The lone player waiting here, or the player who passed through this box on a free pass. */
   entry: EntryView | null;
@@ -71,7 +75,7 @@ export interface RoundView {
   round: number;
   matches: MatchView[];
   /** Slot pairs (round one) or boxes (later rounds) with one player: "awaiting opponent". */
-  awaiting: Array<{ number: number; slot: number; entry: EntryView }>;
+  awaiting: Array<{ number: number; label: string; slot: number; entry: EntryView }>;
   waiting: EntryView[];
   free_passes: Array<{ id: string; entry: EntryView }>;
   /** Every box of the round in order, for the tree view. */
@@ -98,6 +102,8 @@ export interface BracketPayload {
     buybacks_open: boolean;
     open_slots: number;
     winner: EntryView | null;
+    /** Complete with no champion: the night was ended early on time (spec 5.11). */
+    ended_early: boolean;
   };
   rounds: RoundView[];
   /** Every entry tonight with where it stands (the override screen lists these). */
@@ -132,7 +138,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
     id: m.id,
     round: m.round,
     number: m.number,
-    label: matchLabel(m),
+    label: matchLabel(s, m),
     state: m.state,
     origin: m.origin,
     a: view(m.player_a_id),
@@ -172,6 +178,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       boxes.push({
         k,
         number: matchNumberFor(B, r, k),
+        label: boxLabel(B, r, k),
         match: m,
         entry: m ? null : pass ? view(pass.entry_id) : waiter ? view(waiter.entry.id) : null,
         free_pass: !m && !!pass,
@@ -180,7 +187,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
     rounds.push({
       round: r,
       matches,
-      awaiting: lone.map((h) => ({ number: h.number, slot: h.slot, entry: view(h.entry.id) })),
+      awaiting: lone.map((h) => ({ number: h.number, label: numberLabel(B, h.number), slot: h.slot, entry: view(h.entry.id) })),
       waiting: inProgress ? waitingEntries(s, r).map((e) => view(e.id)) : [],
       free_passes: passes.map((fp) => ({ id: fp.id, entry: view(fp.entry_id) })),
       boxes,
@@ -206,6 +213,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       buybacks_open: buybacksOpen(s),
       open_slots: openSlots(s),
       winner: c.winner_entry_id ? view(c.winner_entry_id) : null,
+      ended_early: c.status === "complete" && c.winner_entry_id === null,
     },
     rounds,
     entries: s.entries.map((e) => view(e.id)).sort((x, y) => x.name.localeCompare(y.name) || (x.buyback_seq ?? 0) - (y.buyback_seq ?? 0)),

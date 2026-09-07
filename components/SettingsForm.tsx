@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { BracketPayload } from "@/lib/bracket/payload";
+import { Btn } from "./Btn";
 import { patch } from "./client/api";
 import { useAction } from "./client/hooks";
 
@@ -43,7 +44,7 @@ export function SettingsForm({ competition }: { competition: BracketPayload | nu
   };
 
   return (
-    <main>
+    <main className="narrow">
       <h1>Settings</h1>
       {!c ? (
         <p className="muted">
@@ -73,7 +74,7 @@ export function SettingsForm({ competition }: { competition: BracketPayload | nu
           </div>
           {error && <div className="error" onClick={() => setError(null)}>{error}</div>}
           {saved && <div className="info">Saved.</div>}
-          <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+          <Btn className="primary" disabled={busy} pending={busy} onClick={save}>Save</Btn>
         </div>
       )}
       <p style={{ marginTop: 16 }}>

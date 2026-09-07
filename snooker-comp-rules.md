@@ -11,6 +11,7 @@ Part A is for players. Part B is how the app runs the night and is the spec for 
 - Single-elimination knockout, played on one night, with a **16 or 32 player** round-one bracket.
 - Every match is **one frame** with a **25-minute time limit** (see 5).
 - Lose in round one and you can **buy back** for one more match in round one. Lose in round two or later and you are out.
+- If the club's time runs out before the final, the organiser **ends the night where it stands**. Every result played counts and the handicaps are adjusted as usual (6, 13); the title is simply not awarded that week.
 
 ## 2. Fees
 
@@ -24,7 +25,7 @@ Part A is for players. Part B is how the app runs the night and is the spec for 
 - All entered players are drawn at random into round one.
 - A round-one loser can buy back **once**, if they want to — it is never automatic. A buy-back goes straight into the bracket: a **random empty match** while one is left, otherwise the empty seat beside a **random player still waiting for an opponent**, first-draw or buy-back alike (see 9). Winners join the first-draw winners in round two.
 - **Buy-backs are limited to the empty slots, first come first served.** A bracket with no empty slots has no room for any; when the last slot goes, the next loser is out however willing they are to pay. The organiser picks the bracket size with this in mind.
-- A player who arrives after the draw can enter as a buy-back player, taking a slot the same way.
+- A player who arrives after the draw can enter as a **late arrival**, taking an empty slot and placed the same way as a buy-back (see 9). A late arrival is not a buy-back: if they lose in round one they can buy back once, like everyone else.
 - Once the organiser closes the buy-back window, no more entries for the night. (If it was closed by mistake, the organiser can reopen it from the app's override screen.)
 
 ## 4. Free passes and the bracket
@@ -61,9 +62,10 @@ Part A is for players. Part B is how the app runs the night and is the spec for 
 
 1. Organiser sets the bracket size (**16 or 32**) and selects the entered players. The bracket size cannot be changed after start. The match time limit and the rating scale (13) live on a separate settings page.
 2. **Start Competition** shuffles the players and fills the round-one bracket top to bottom with no gaps. Slots left empty stay open for buy-backs and late arrivals; an odd player out becomes a waiting player.
-3. After start, players can only be added as buy-backs.
-4. If the draw is wrong, the organiser can **abandon** the night and set it up again. Everything played so far is kept for the record.
-5. The organiser's **override** screen can change anything at any point — add or remove a player, repair a match, reopen the buy-back window — for the things a night throws up that no rule covers. Every use is logged against the organiser who did it.
+3. After start, players can only be added as late arrivals (3) while the buy-back window is open, or through the override (5).
+4. **End night here** closes a night that has run out of time. The night counts: every result is kept, it goes into the history, and the handicap review opens as usual — but no winner is recorded, and it reads "completed (unfinished)". A match still on the clock is put back to not started. It cannot be undone.
+5. If the draw is wrong, the organiser can **abandon** the night and set it up again. Everything played so far is kept for the record, but an abandoned night counts for nothing and gets no handicap review.
+6. The organiser's **override** screen can change anything at any point — add or remove a player, repair a match, reopen the buy-back window — for the things a night throws up that no rule covers. Every use is logged against the organiser who did it.
 
 ## 9. Buy-back placement
 
@@ -79,7 +81,7 @@ For when a table is free but no match is ready. **Force Pair** picks two waiting
 
 ## 11. Closing buy-backs and moving up the bracket
 
-- **Close Buy-Backs** locks the player list. It also closes automatically once every round-one loser has bought back or been marked **Declined**.
+- **Close Buy-Backs** — the **No More Buy-Backs / Late Entries** button — locks the player list. Nothing closes it automatically: buy-backs and late arrivals are taken until the organiser taps it, even after every round-one match has been played.
 - When the window closes, **every** round-one player still without an opponent gets a free pass to round two. There may be more than one (4); **Force Pair** before closing is how the organiser avoids that.
 - Winners move up the bracket as each match finishes: a round-two match is ready the moment both matches feeding it are done, without waiting for the rest of round one. Later rounds follow the same way, with no buy-backs and no Force Pair.
 

@@ -15,6 +15,7 @@ import * as start from "@/app/api/admin/competitions/[id]/start/route";
 import * as forcePair from "@/app/api/admin/competitions/[id]/force-pair/route";
 import * as closeBuybacks from "@/app/api/admin/competitions/[id]/close-buybacks/route";
 import * as abandon from "@/app/api/admin/competitions/[id]/abandon/route";
+import * as endNight from "@/app/api/admin/competitions/[id]/end/route";
 import * as ratingReview from "@/app/api/admin/competitions/[id]/rating-review/route";
 import * as adminActions from "@/app/api/admin/competitions/[id]/admin-actions/route";
 import * as ovEntries from "@/app/api/admin/competitions/[id]/override/entries/route";
@@ -85,15 +86,19 @@ export const api = {
   ratingHistory: (id: string) => call<{ history: Array<{ old_rating: number | null; new_rating: number; changed_by: string }> }>(ratingHistory.GET, "GET", `/api/admin/players/${id}/rating-history`, { params: { id } }),
   competitions: () => call<{ competitions: Array<{ id: string; status: string; rating_top_count: number }> }>(competitions.GET, "GET", "/api/admin/competitions"),
   createCompetition: (body: unknown = {}) =>
-    call<{ competition: { id: string; name: string; bracket_size: number; rating_top_count: number; rating_bottom_delta: number } }>(competitions.POST, "POST", "/api/admin/competitions", { body }),
+    call<{ competition: { id: string; name: string; bracket_size: number; rating_top_count: number; rating_bottom_delta: number }; bracket: BracketPayload }>(competitions.POST, "POST", "/api/admin/competitions", { body }),
   getCompetition: (id: string) => call<BracketPayload>(competitionById.GET, "GET", `/api/admin/competitions/${id}`, { params: { id } }),
   patchCompetition: (id: string, body: unknown) => call<{ bracket: BracketPayload }>(competitionById.PATCH, "PATCH", `/api/admin/competitions/${id}`, { body, params: { id } }),
   addEntry: (id: string, body: unknown) => call<{ entry_id: string; match_number: number | null; awaiting_in: number | null; bracket: BracketPayload }>(entries.POST, "POST", `/api/admin/competitions/${id}/entries`, { body, params: { id } }),
+  addEntries: (id: string, player_ids: string[]) => call<{ entry_ids: string[]; bracket: BracketPayload }>(entries.POST, "POST", `/api/admin/competitions/${id}/entries`, { body: { player_ids }, params: { id } }),
   removeEntry: (id: string, entryId: string) => call(entryById.DELETE, "DELETE", `/api/admin/competitions/${id}/entries/${entryId}`, { params: { id, entryId } }),
+  removeEntries: (id: string, entry_ids: string[]) => call<{ bracket: BracketPayload }>(entries.DELETE, "DELETE", `/api/admin/competitions/${id}/entries`, { body: { entry_ids }, params: { id } }),
   start: (id: string) => call<{ bracket: BracketPayload }>(start.POST, "POST", `/api/admin/competitions/${id}/start`, { params: { id } }),
   forcePair: (id: string) => call<{ match_number: number; bracket: BracketPayload }>(forcePair.POST, "POST", `/api/admin/competitions/${id}/force-pair`, { params: { id } }),
   closeBuybacks: (id: string) => call<{ free_passes: number; free_pass_names: string[]; matches_created: number[]; completed: boolean; bracket: BracketPayload }>(closeBuybacks.POST, "POST", `/api/admin/competitions/${id}/close-buybacks`, { params: { id } }),
   abandon: (id: string) => call(abandon.POST, "POST", `/api/admin/competitions/${id}/abandon`, { params: { id } }),
+  endNight: (id: string, body: unknown = {}) =>
+    call<{ unplayed: number; clocks_cancelled: number; still_in: string[]; bracket?: BracketPayload }>(endNight.POST, "POST", `/api/admin/competitions/${id}/end`, { body, params: { id } }),
   ratingReview: (id: string) => call<{ rows: Array<{ player_id: string; name: string; current_rating: number; proposed_rating: number; delta: number; group: string; finish: string }> }>(ratingReview.GET, "GET", `/api/admin/competitions/${id}/rating-review`, { params: { id } }),
   saveRatingReview: (id: string, changes: Array<{ player_id: string; new_rating: number }>) => call<{ written: number }>(ratingReview.POST, "POST", `/api/admin/competitions/${id}/rating-review`, { body: { changes }, params: { id } }),
   adminActions: (id: string) => call<{ actions: Array<{ actor: string; action: string; details: Record<string, unknown> }> }>(adminActions.GET, "GET", `/api/admin/competitions/${id}/admin-actions`, { params: { id } }),
@@ -124,8 +129,6 @@ export interface CompleteReply {
   loser_decision: string | null;
   no_slots: boolean;
   buyback_match_number: number | null;
-  auto_closed: boolean;
-  free_passes: number;
   winner_to: { kind: string; round: number | null; match_number: number | null };
   completed: boolean;
   bracket: BracketPayload;
@@ -173,6 +176,13 @@ export async function playCurrentRound(competitionId: string, pick: (m: MatchVie
     await playMatch(m, w, eligible ? decide(m) : undefined);
     b = (await api.bracket(competitionId)).body;
     if (b.competition!.status !== "in_progress") break;
+  }
+  // The window never closes by itself (O-15): once round one is played out, tap No More Buy-Backs / Late
+  // Entries as the organiser would, so lone players get their pass and the tree moves on.
+  if (round === 1 && b.competition!.status === "in_progress" && b.competition!.buybacks_open && find.matchesInRound(b, 1).every((m) => m.state === "finished")) {
+    const close = await api.closeBuybacks(competitionId);
+    if (close.status !== 200) throw new Error(`close buy-backs: ${JSON.stringify(close.body)}`);
+    b = close.body.bracket;
   }
   return b;
 }

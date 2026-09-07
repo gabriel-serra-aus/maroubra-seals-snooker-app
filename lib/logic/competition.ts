@@ -1,7 +1,7 @@
-// Setup, Start Competition (rules 8, spec 5.1) and Abandon (O-7, spec 5.11).
+// Setup, Start Competition (rules 8, spec 5.1), End night here (O-16) and Abandon (O-7), both spec 5.11.
 
 import { badRequest, conflict } from "./errors";
-import { entryById, matchNumberForSlot, playerRating } from "./derive";
+import { entryById, matchLabel, matchNumberForSlot, playerRating, positionOf } from "./derive";
 import { createMatch } from "./matches";
 import { shuffle } from "./random";
 import type { Ctx, EntryRow, Snapshot } from "./types";
@@ -74,6 +74,50 @@ export function abandonCompetition(s: Snapshot, ctx: Ctx): void {
   c.status = "abandoned";
   c.abandoned_at = ctx.now;
   ctx.log.push({ action: "abandon", details: { competition: c.name, matches: s.matches.length } });
+}
+
+/**
+ * "End night here" (spec 5.11): the club runs out of time far more often than the bracket runs out of
+ * matches, so the night is closed where it stands. It counts: the night is `complete`, it keeps every
+ * result, it appears in history and it opens the rating review, which reads the round each player
+ * reached (spec 5.9) and so does not need a champion. There is no winner — nobody won the final — so
+ * `winner_entry_id` stays null and the night reads "completed (unfinished)" everywhere.
+ * Any match still in play has its clock thrown away like a Cancel start (O-5): the frame was not played
+ * out, and a running countdown on a finished night would be a lie. Unlike Abandon (O-7), which is for a
+ * night that should not count at all, this one is the ordinary way most nights end.
+ */
+export function endCompetitionEarly(s: Snapshot, ctx: Ctx): { unplayed: number; cancelled: number; standing: string[] } {
+  const c = s.competition;
+  if (c.status !== "in_progress") throw conflict("Only a competition that is running can be ended");
+  const cancelled: string[] = [];
+  for (const m of s.matches) {
+    if (m.state !== "in_play") continue;
+    m.started_at = null;
+    m.time_limit_minutes = null;
+    m.state = "not_started";
+    cancelled.push(matchLabel(s, m));
+  }
+  const unplayed = s.matches.filter((m) => m.state !== "finished").length;
+  const standing = playersStillIn(s);
+  c.status = "complete";
+  c.completed_at = ctx.now;
+  c.winner_entry_id = null;
+  ctx.log.push({
+    action: "end_early",
+    details: { competition: c.name, unplayed, clocks_cancelled: cancelled, still_in: standing },
+  });
+  return { unplayed, cancelled: cancelled.length, standing };
+}
+
+/** Names of the players who had not been knocked out when the night was called (spec 5.11). */
+export function playersStillIn(s: Snapshot): string[] {
+  const names: string[] = [];
+  for (const e of s.entries) {
+    if (positionOf(s, e.id).status === "out") continue;
+    const p = s.players.find((x) => x.id === e.player_id);
+    if (p) names.push(p.name);
+  }
+  return names.sort((a, b) => a.localeCompare(b));
 }
 
 /** The pool of entries that will contest round r+1 is worked out elsewhere; this names the entry for logs. */

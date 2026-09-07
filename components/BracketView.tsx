@@ -1,6 +1,7 @@
 "use client";
 
 import type { BracketPayload, EntryView, RoundView } from "@/lib/bracket/payload";
+import { feederLabel } from "@/lib/logic/derive";
 import { fmtRating } from "./client/format";
 import { MatchCard, type MatchActions } from "./MatchCard";
 
@@ -8,7 +9,7 @@ export function EntryName({ e }: { e: EntryView }) {
   return (
     <span>
       {e.name} <span className="muted">({fmtRating(e.rating)})</span>{" "}
-      {e.source === "buyback" ? <span className="tag buyback">buy-back{e.buyback_seq ? ` #${e.buyback_seq}` : ""}</span> : <span className="tag draw">first draw</span>}
+      {e.source === "buyback" ? <span className="tag buyback">buy-back{e.buyback_seq ? ` #${e.buyback_seq}` : ""}</span> : e.source === "late" ? <span className="tag late">late arrival</span> : <span className="tag draw">first draw</span>}
     </span>
   );
 }
@@ -28,20 +29,29 @@ function RoundBody({ r, b, now, actions, expandable }: { r: RoundView; b: Bracke
       {r.matches.length === 0 && r.awaiting.length === 0 && (
         <p className="muted">{r.round === 1 ? "No matches yet." : inProgress ? "Waiting for the previous round." : ""}</p>
       )}
-      {r.matches.map((m) => (
-        <MatchCard key={m.id} m={m} now={now} actions={actions} expandable={expandable} />
-      ))}
-      {r.awaiting.map((a) => (
-        <div key={a.entry.entry_id} className="match awaiting">
-          <div className="head">
-            <span>M{a.number} <span className="state">○ AWAITING OPPONENT</span></span>
-            {r.round === 1 && <span className="muted">slot {a.slot}</span>}
-          </div>
-          <div className="player">
-            <EntryName e={a.entry} />
-          </div>
+      {(r.matches.length > 0 || r.awaiting.length > 0) && (
+        // Cards flow into columns on a wide screen and stack on a phone.
+        <div className="match-grid">
+          {r.matches.map((m) => (
+            <MatchCard key={m.id} m={m} now={now} actions={actions} expandable={expandable} />
+          ))}
+          {r.awaiting.map((a) => (
+            <div key={a.entry.entry_id} className="match awaiting">
+              <div className="head">
+                <span>
+                  {a.label} <span className="state">○ AWAITING OPPONENT</span>
+                </span>
+                {r.round === 1 && <span className="muted">slot {a.slot}</span>}
+              </div>
+              <div className="player">
+                <EntryName e={a.entry} />
+              </div>
+              {/* The second seat of the card: who fills it depends on the round (spec 5.2, 5.4). */}
+              <div className="player muted">{r.round === 1 ? "open seat — next buy-back or late arrival" : `winner of ${feederLabel(c.bracket_size, a.slot, r.round)}`}</div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
       {inProgress && r.round === 1 && (
         <div className="card">
           <div className="row between">
@@ -83,7 +93,9 @@ export function BracketView({ b, now, actions, expandable }: { b: BracketPayload
             </section>
           ) : (
             <details key={r.round} className="round">
-              <summary>{title(r)} · {r.matches.length} match{r.matches.length === 1 ? "" : "es"}</summary>
+              <summary>
+                {title(r)} · {r.matches.length} match{r.matches.length === 1 ? "" : "es"}
+              </summary>
               <RoundBody r={r} b={b} now={now} actions={actions} expandable={expandable} />
             </details>
           ),

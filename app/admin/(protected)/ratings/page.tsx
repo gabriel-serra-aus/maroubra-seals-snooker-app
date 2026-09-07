@@ -17,7 +17,7 @@ export default async function RatingsPage({ searchParams }: { searchParams: Prom
   const c = id ? await getCompetition(db, id) : completed[0];
   if (!c || c.status !== "complete") {
     return (
-      <main>
+      <main className="narrow">
         <h1>Ratings</h1>
         <p className="muted">The rating review opens once a competition is complete.</p>
         {completed.length > 0 && (

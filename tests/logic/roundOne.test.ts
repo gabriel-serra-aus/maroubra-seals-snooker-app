@@ -86,3 +86,17 @@ describe("round-one fill (rules 8.2, spec 5.1)", () => {
     expect(pickFreeSlot(s, seededRng(1))).toBeUndefined();
   });
 });
+
+describe("display names (spec 3.4): round and match within it, the last round as Final", () => {
+  it("names boxes and positional numbers for 16 and 32", async () => {
+    const { boxLabel, numberLabel, feederLabel, roundOfNumber } = await import("@/lib/logic/derive");
+    expect([1, 8, 9, 12, 13, 14, 15].map((n) => numberLabel(16, n))).toEqual(["R1M1", "R1M8", "R2M1", "R2M4", "R3M1", "R3M2", "Final"]);
+    expect([1, 16, 17, 24, 25, 28, 29, 30, 31].map((n) => numberLabel(32, n))).toEqual(["R1M1", "R1M16", "R2M1", "R2M8", "R3M1", "R3M4", "R4M1", "R4M2", "Final"]);
+    expect([1, 8, 9, 12, 13, 15].map((n) => roundOfNumber(16, n))).toEqual([1, 1, 2, 2, 3, 4]);
+    expect(boxLabel(16, 2, 3)).toBe("R2M3");
+    // The M1 winner waiting in R2M1 is waiting for the R1M2 winner; the slot-4 winner for R1M1's.
+    expect(feederLabel(16, 1, 2)).toBe("R1M2");
+    expect(feederLabel(16, 4, 2)).toBe("R1M1");
+    expect(feederLabel(16, 9, 4)).toBe("R3M1");
+  });
+});

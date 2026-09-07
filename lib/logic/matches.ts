@@ -8,6 +8,7 @@ import {
   isWaitingIn,
   mateSlot,
   matchNumberForSlot,
+  numberLabel,
   pickFreeSlot,
   playerRating,
 } from "./derive";
@@ -24,7 +25,7 @@ export function createMatch(
   origin: MatchOrigin,
 ): MatchRow {
   if (aId === bId) throw conflict("A match needs two different players");
-  if (s.matches.some((m) => m.number === number)) throw conflict(`M${number} already exists`);
+  if (s.matches.some((m) => m.number === number)) throw conflict(`${numberLabel(s.competition.bracket_size, number)} already exists`);
   const a = entryById(s, aId);
   const b = entryById(s, bId);
   const ratingA = playerRating(s, a.player_id);

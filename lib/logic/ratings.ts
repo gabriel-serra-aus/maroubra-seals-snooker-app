@@ -37,6 +37,9 @@ function reachOfEntry(s: Snapshot, entryId: string, joined: number): number {
 export function ratingReview(s: Snapshot): ReviewRow[] {
   const c = s.competition;
   const finalRound = Math.max(1, ...s.matches.map((m) => m.round));
+  // A night ended early (spec 5.11) has no champion and never played a final, so the furthest round it
+  // reached is not "the final" — everyone is labelled by the round they got to.
+  const endedEarly = c.status === "complete" && c.winner_entry_id === null;
   const byPlayer = new Map<string, { reached: number; won: boolean }>();
   for (const e of s.entries) {
     const reach = reachOfEntry(s, e.id, e.joined_round);
@@ -48,7 +51,7 @@ export function ratingReview(s: Snapshot): ReviewRow[] {
   for (const [player_id, { reached, won }] of byPlayer) {
     const p = s.players.find((x) => x.id === player_id);
     if (!p) continue;
-    const finish = won ? "won" : reached === finalRound && finalRound > 1 ? "final" : `R${reached}`;
+    const finish = won ? "won" : !endedEarly && reached === finalRound && finalRound > 1 ? "final" : `R${reached}`;
     rows.push({
       player_id,
       name: p.name,

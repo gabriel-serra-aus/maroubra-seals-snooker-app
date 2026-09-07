@@ -52,6 +52,25 @@ describe("Force Pair (rules 10, spec 5.5)", () => {
     expect(s.matches.filter((m) => m.round === 1)).toHaveLength(7);
   });
 
+  it("only ever pairs round-one waiters: two players waiting in round two while buy-backs are open are left alone", () => {
+    // 13 of 16 with M1, M2 and M3 done: the M1 and M2 winners meet in M9 at once (O-14), the M3 winner
+    // waits alone in round two, and Gus waits alone in round one.
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(13) });
+    play(s, ctx, 1, "a", "declined");
+    play(s, ctx, 2, "a", "declined");
+    play(s, ctx, 3, "a", "declined");
+    expect(match(s, 9).round).toBe(2);
+    expect(waitingEntries(s, 2)).toHaveLength(1);
+    expect(waitingEntries(s, 1)).toHaveLength(1); // Gus in M7
+    expect(s.competition.buybacks_closed_at).toBeNull();
+    expect(() => forcePair(s, ctx)).toThrow(/Needs 2 waiting players/);
+    // Even with a second round-two waiter, Force Pair never reaches past round one (rules 10).
+    play(s, ctx, 5, "a", "declined");
+    expect(waitingEntries(s, 2)).toHaveLength(2);
+    expect(() => forcePair(s, ctx)).toThrow(/Needs 2 waiting players/);
+    expect(s.matches.filter((m) => m.origin === "force_pair")).toHaveLength(0);
+  });
+
   it("is rejected once buy-backs are closed", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(8) });
     closeBuybacks(s, ctx);

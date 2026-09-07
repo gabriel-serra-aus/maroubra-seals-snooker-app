@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Btn } from "./Btn";
 
 /** Admin login (spec 3.1): one box for the code; the app works out who it belongs to (O-8). */
 export function LoginForm() {
@@ -31,7 +32,7 @@ export function LoginForm() {
     }
   };
   return (
-    <main>
+    <main className="narrow">
       <div className="brand center">
         {/* Served as-is from public/: three fixed sizes, no image service needed (plan: cheap and self-contained). */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -44,7 +45,7 @@ export function LoginForm() {
           <span>Admin code</span>
           <input type="password" autoComplete="current-password" autoFocus value={code} onChange={(e) => setCode(e.target.value)} />
         </label>
-        <button className="btn primary wide" disabled={busy || !code}>{busy ? "Signing in…" : "Log in"}</button>
+        <Btn type="submit" className="primary wide" disabled={!code} pending={busy}>Log in</Btn>
         {rejected && <div className="error">Code not accepted. Try again.</div>}
       </form>
       <p style={{ marginTop: 24 }}>

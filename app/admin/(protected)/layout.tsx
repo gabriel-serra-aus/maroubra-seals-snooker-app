@@ -23,6 +23,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/setup">Setup</Link>
             <Link href="/admin/players">Players</Link>
             <Link href="/admin/ratings">Ratings</Link>
+            <Link href="/admin/history">History</Link>
             <Link href="/admin/override">Override</Link>
           </nav>
           <span className="row small">

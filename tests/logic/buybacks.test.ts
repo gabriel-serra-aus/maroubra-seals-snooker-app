@@ -55,17 +55,22 @@ describe("placement on entry (rules 3, 9; spec 5.2; O-13)", () => {
     expect(late.match!.origin).toBe("placement");
     expect(halfFullPairs(s)).toHaveLength(2);
     expect(openSlots(s)).toBe(2);
-    // The last two first-draw results: one declines, one buys back beside a lone player; the window
-    // auto-closes and the last lone player goes through.
+    // The last two first-draw results: one declines, one buys back beside a lone player. The window
+    // stays open (O-15): a late arrival still takes the last seat, and only the organiser's tap ends it.
     play(s, ctx, 4, "b", "declined");
     expect(s.competition.buybacks_closed_at).toBeNull();
     const r5 = play(s, ctx, 5, "b", "bought_back");
     expect(r5.loser.buybackMatch).not.toBeNull();
     expect(openSlots(s)).toBe(1);
-    expect(s.competition.buybacks_closed_at).not.toBeNull();
-    expect(r5.autoClose?.freePasses).toHaveLength(1);
+    expect(s.competition.buybacks_closed_at).toBeNull();
+    expect(halfFullPairs(s)).toHaveLength(1);
     s.players.push({ id: "later", name: "Later", rating: 30, active: true });
-    expect(() => addLateArrival(s, ctx, "later")).toThrow(/closed/);
+    expect(addLateArrival(s, ctx, "later").match).not.toBeNull();
+    expect(openSlots(s)).toBe(0);
+    s.players.push({ id: "latest", name: "Latest", rating: 30, active: true });
+    expect(() => addLateArrival(s, ctx, "latest")).toThrow(/No open slots/);
+    expect(closeBuybacks(s, ctx).freePasses).toHaveLength(0);
+    expect(() => addLateArrival(s, ctx, "latest")).toThrow(/closed/);
   });
 
   it("the organiser's example: 5 players, a buy-back takes an empty match even though a first-draw player is waiting; the next pairs with a random lone player", () => {
@@ -121,6 +126,60 @@ describe("capacity (O-3)", () => {
     const r = completeMatch(s, ctx, m8.id, winner);
     expect(r.loser.decision).toBeNull();
     expect(positionOf(s, loserBb).status).toBe("out");
+  });
+});
+
+describe("late arrivals (rules 3, 8.3): flagged late, not buy-back, and still entitled to one buy-back", () => {
+  it("enters as a `late` entry with no buy-back sequence, taking an open slot", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(13) });
+    s.players.push({ id: "late", name: "Late", rating: 30, active: true });
+    const { entry: e, match: m } = addLateArrival(s, ctx, "late");
+    expect(e.source).toBe("late");
+    expect(e.buyback_seq).toBeNull();
+    expect(e.rebuy_of_entry_id).toBeNull();
+    expect(e.slot).toBe(15); // the empty M8 first (O-13), not the seat beside Gus in M7
+    expect(m).toBeNull();
+    expect(openSlots(s)).toBe(2);
+    expect(s.entries.filter((x) => x.source === "buyback")).toHaveLength(0);
+  });
+
+  it("a late arrival who loses in round one is offered the buy-back and can take it once", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(13) });
+    s.players.push({ id: "late", name: "Late", rating: 30, active: true });
+    const late = addLateArrival(s, ctx, "late").entry;
+    // Pair them with a first-draw loser's buy-back: M1's loser buys back beside them (no empty match left).
+    const r1 = play(s, ctx, 1, "a", "bought_back");
+    const m = r1.loser.buybackMatch!;
+    expect([m.player_a_id, m.player_b_id]).toContain(late.id);
+    // Late loses: eligible, and their buy-back references the late entry.
+    startMatch(s, ctx, m.id);
+    const other = m.player_a_id === late.id ? m.player_b_id : m.player_a_id;
+    expect(() => completeMatch(s, ctx, m.id, other)).toThrow(/loser_decision is required/);
+    const r = completeMatch(s, ctx, m.id, other, "bought_back");
+    expect(r.loser.decision).toBe("bought_back");
+    const bb = entry(s, r.loser.buybackEntryId!);
+    expect(bb.source).toBe("buyback");
+    expect(bb.rebuy_of_entry_id).toBe(late.id);
+    expect(late.buyback_decision).toBe("bought_back");
+    expect(openSlots(s)).toBe(0);
+    // Their buy-back loses: out, no second buy-back (rules 3).
+    const m2 = s.matches.find((x) => x.round === 1 && (x.player_a_id === bb.id || x.player_b_id === bb.id))!;
+    startMatch(s, ctx, m2.id);
+    const other2 = m2.player_a_id === bb.id ? m2.player_b_id : m2.player_a_id;
+    expect(() => completeMatch(s, ctx, m2.id, other2, "bought_back")).toThrow(/No buy-back decision/);
+    completeMatch(s, ctx, m2.id, other2);
+    expect(positionOf(s, bb.id).status).toBe("out");
+  });
+
+  it("refuses a player already in tonight, and a round-one loser (who buys back through Review result)", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(13) });
+    const p1 = slotEntry(s, 1);
+    expect(() => addLateArrival(s, ctx, p1.player_id)).toThrow(/already in tonight/);
+    play(s, ctx, 1, "b", "declined");
+    expect(() => addLateArrival(s, ctx, p1.player_id)).toThrow(/Review result/);
+    expect(s.entries.filter((e) => e.player_id === p1.player_id)).toHaveLength(1);
+    s.players.push({ id: "idle", name: "Idle", rating: 30, active: false });
+    expect(() => addLateArrival(s, ctx, "idle")).toThrow(/Inactive/);
   });
 });
 

@@ -56,6 +56,11 @@ describe("32 bracket, buy-backs and a late arrival placed at once, manual close"
     expect(late.body.match_number).toBeNull();
     expect(late.body.awaiting_in).toBeGreaterThanOrEqual(12);
     b = late.body.bracket;
+    // Flagged as a late arrival, not a buy-back (rules 3): no sequence, and still entitled to one buy-back.
+    const larry = b.entries.find((e) => e.name === "Late Larry")!;
+    expect(larry.source).toBe("late");
+    expect(larry.buyback_seq).toBeNull();
+    expect(larry.has_buyback_entry).toBe(false);
     const awaiting = find.round(b, 1).awaiting.map((a) => a.number);
     expect(awaiting).toHaveLength(4);
     expect(awaiting[0]).toBe(11);
@@ -103,12 +108,12 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     await api.startMatch(m9.id);
     b = (await api.bracket(comp)).body;
     const m1 = find.match(b, 1);
-    expect(m1.correction_blocked).toMatch(/M9 has started/);
+    expect(m1.correction_blocked).toMatch(/R2M1 has started/);
     expect((await api.correct(m1.id, m1.a.entry_id)).status).toBe(409);
     const dry = await api.ov.reset(m1.id, { dry_run: true });
     expect(dry.status).toBe(200);
     expect(dry.body.dry_run).toBe(true);
-    expect(dry.body.changes).toEqual(expect.arrayContaining([expect.stringMatching(/M9 .* removed/), "M1 reset to not started"]));
+    expect(dry.body.changes).toEqual(expect.arrayContaining([expect.stringMatching(/R2M1 .* removed/), "R1M1 reset to not started"]));
     expect(find.match((await api.bracket(comp)).body, 1).state).toBe("finished"); // nothing written
     const real = await api.ov.reset(m1.id);
     expect(real.status).toBe(200);
@@ -118,7 +123,7 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     expect(find.round(b, 2).waiting).toHaveLength(1);
     expect(find.round(b, 2).awaiting[0].number).toBe(9);
     const log = (await api.adminActions(comp)).body.actions;
-    expect(log[0]).toMatchObject({ actor: "Gabriel", action: "reset_match", details: { match: "M1", from: "finished" } });
+    expect(log[0]).toMatchObject({ actor: "Gabriel", action: "reset_match", details: { match: "R1M1", from: "finished" } });
     // Replay M1: the winner goes back into M9 with the waiting round-two player.
     await playMatch(find.match(b, 1), "b");
     b = (await api.bracket(comp)).body;
@@ -176,7 +181,7 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     if (eddieAfter.position.status === "in_match") {
       // Already paired through the pass: the revoke is refused, naming the match.
       expect(revoke.status).toBe(409);
-      expect(revoke.body.error).toMatch(/already in M/);
+      expect(revoke.body.error).toMatch(/already in (R\d+M\d+|Final)/);
     } else {
       expect(revoke.status).toBe(200);
       expect(find.round(revoke.body.bracket, eddie.position.round).free_passes.some((x) => x.entry.entry_id === eddie.entry_id)).toBe(false);
@@ -193,6 +198,45 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     let guard = 0;
     while (b.competition?.status === "in_progress" && guard++ < 10) b = await playCurrentRound(comp);
     expect(b.competition?.status).toBe("complete");
+  });
+
+  it("End night here closes an unfinished night as complete with no winner (spec 5.11)", async () => {
+    const players = await club(8, "Early");
+    const { id } = await night(players);
+    let b = await playCurrentRound(id);
+    expect(b.competition?.status).toBe("in_progress");
+    // Round two is under way, one match on the clock, when the club runs out of time.
+    const m9 = find.match(b, 9);
+    expect((await api.startMatch(m9.id)).status).toBe(200);
+    const dry = await api.endNight(id, { dry_run: true });
+    expect(dry.status).toBe(200);
+    expect(dry.body.clocks_cancelled).toBe(1);
+    expect(dry.body.still_in).toHaveLength(4);
+    expect(dry.body.bracket).toBeUndefined();
+    // The dry run wrote nothing: the night is still running with its clock.
+    expect((await api.bracket(id)).body.competition?.status).toBe("in_progress");
+    const r = await api.endNight(id);
+    expect(r.status).toBe(200);
+    expect(r.body.unplayed).toBe(2);
+    b = r.body.bracket!;
+    expect(b.competition?.status).toBe("complete");
+    expect(b.competition?.winner).toBeNull();
+    expect(b.competition?.ended_early).toBe(true);
+    // Every result is kept, and the clock that was running is thrown away (O-5).
+    expect(find.matchesInRound(b, 1).every((m) => m.state === "finished")).toBe(true);
+    expect(find.match(b, 9).state).toBe("not_started");
+    // It counts: it reaches the rating review, which ranks on the round each player reached.
+    const review = await api.ratingReview(id);
+    expect(review.status).toBe(200);
+    expect(review.body.rows).toHaveLength(8);
+    expect(review.body.rows[0].finish).toBe("R2");
+    expect(review.body.rows.some((x) => x.finish === "won")).toBe(false);
+    expect((await api.adminActions(id)).body.actions.map((a) => a.action)).toContain("end_early");
+    // Over is over: a second tap is refused, and the live slot is free for a new night.
+    expect((await api.endNight(id)).status).toBe(409);
+    const next = await api.createCompetition();
+    expect(next.status).toBe(201);
+    expect((await api.abandon(next.body.competition.id)).status).toBe(200);
   });
 
   it("abandon frees the live slot; the public page hides the abandoned night", async () => {

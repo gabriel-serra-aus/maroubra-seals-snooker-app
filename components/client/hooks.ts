@@ -58,12 +58,15 @@ export function useServerClock(serverNowIso: string | undefined): number {
   return now + offset;
 }
 
-/** Runs an async action with a busy flag and an error message the caller can show. */
+/**
+ * Runs an async action. `pending` is the key of the action in flight (the button that was tapped shows a
+ * spinner); `busy` disables everything else until the reply lands (spec 3.4).
+ */
 export function useAction() {
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const run = useCallback(async (fn: () => Promise<unknown>) => {
-    setBusy(true);
+  const run = useCallback(async (fn: () => Promise<unknown>, key = "default") => {
+    setPending(key);
     setError(null);
     try {
       await fn();
@@ -72,10 +75,10 @@ export function useAction() {
       setError(e instanceof Error ? e.message : String(e));
       return false;
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   }, []);
-  return { busy, error, run, setError };
+  return { busy: pending !== null, pending, error, run, setError };
 }
 
 /**
@@ -94,7 +97,7 @@ function subscribeChoice(cb: () => void) {
   };
 }
 
-export function useStoredChoice<T extends string>(key: string, fallback: T): [T, (v: T) => void] {
+export function useStoredChoice<T extends string>(key: string, fallback: T, serverFallback: T = fallback): [T, (v: T) => void] {
   const read = useCallback((): T => {
     const cached = choiceCache.get(key);
     if (cached) return cached as T;
@@ -104,7 +107,9 @@ export function useStoredChoice<T extends string>(key: string, fallback: T): [T,
       return fallback;
     }
   }, [key, fallback]);
-  const value = useSyncExternalStore(subscribeChoice, read, () => fallback);
+  // The server render (and hydration) always sees `serverFallback`; the client's own default may depend
+  // on the screen (useWideScreen) and takes over right after hydration.
+  const value = useSyncExternalStore(subscribeChoice, read, () => serverFallback);
   const set = useCallback(
     (v: T) => {
       choiceCache.set(key, v);
@@ -118,4 +123,19 @@ export function useStoredChoice<T extends string>(key: string, fallback: T): [T,
     [key],
   );
   return [value, set];
+}
+
+/**
+ * True on a screen wide enough to read the whole tree at once: a desktop, or a tablet in landscape.
+ * Decides the default bracket view (spec 3.4, 3.8): tree on a wide screen, list on a phone. False during
+ * the server render so hydration matches; the real answer arrives on the first client render.
+ */
+const WIDE_SCREEN = "(min-width: 900px)";
+function subscribeWide(cb: () => void) {
+  const mq = window.matchMedia(WIDE_SCREEN);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+export function useWideScreen(): boolean {
+  return useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE_SCREEN).matches, () => false);
 }

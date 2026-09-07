@@ -114,9 +114,9 @@ export function unwindAdvance(
     .sort((a, b) => b.round - a.round);
   for (const m of later) {
     if (m.state !== "not_started") {
-      if (!opts.force) throw conflict(`Result locked: ${matchLabel(m)} has started`);
+      if (!opts.force) throw conflict(`Result locked: ${matchLabel(s, m)} has started`);
       resetMatchInternal(s, ctx, m, opts);
-      unwound.push(matchLabel(m));
+      unwound.push(matchLabel(s, m));
     }
     removeMatch(s, m);
     deleted.push(m);

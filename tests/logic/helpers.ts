@@ -1,3 +1,4 @@
+import { closeBuybacks } from "@/lib/logic/buybacks";
 import { addDrawEntry, startCompetition } from "@/lib/logic/competition";
 import { currentRound, matchLabel } from "@/lib/logic/derive";
 import { completeMatch, startMatch, type LoserDecision } from "@/lib/logic/matchControl";
@@ -59,7 +60,7 @@ export function startNight(opts: NightOpts, ctx = makeCtx()): { s: Snapshot; ctx
 
 export const match = (s: Snapshot, number: number): MatchRow => {
   const m = s.matches.find((x) => x.number === number);
-  if (!m) throw new Error(`no M${number}: have ${s.matches.map(matchLabel).join(",")}`);
+  if (!m) throw new Error(`no M${number}: have ${s.matches.map((m) => matchLabel(s, m)).join(",")}`);
   return m;
 };
 
@@ -71,7 +72,7 @@ export const slotEntry = (s: Snapshot, slot: number): EntryRow => {
   return e;
 };
 
-export const entryOf = (s: Snapshot, playerId: string, source: "draw" | "buyback" = "draw"): EntryRow => {
+export const entryOf = (s: Snapshot, playerId: string, source: "draw" | "late" | "buyback" = "draw"): EntryRow => {
   const e = s.entries.find((x) => x.player_id === playerId && x.source === source);
   if (!e) throw new Error(`no ${source} entry for ${playerId}`);
   return e;
@@ -108,6 +109,9 @@ export function playRound(
     play(s, ctx, m.number, w, eligible ? decide(m, loser) : undefined);
     if (s.competition.status !== "in_progress") return;
   }
+  // The window never closes by itself (O-15): once round one is played out, do what the organiser does
+  // and tap No More Buy-Backs / Late Entries, so lone players get their pass and the tree moves on.
+  if (r === 1 && s.competition.buybacks_closed_at === null && !s.matches.some((m) => m.round === 1 && m.state !== "finished")) closeBuybacks(s, ctx);
 }
 
 /** Plays the whole night out, round by round, until there is a winner. */

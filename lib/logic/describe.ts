@@ -10,7 +10,7 @@ export function describeChanges(before: Snapshot, after: Snapshot): string[] {
     if (!entryId) return "?";
     const e = s.entries.find((x) => x.id === entryId);
     const p = e && s.players.find((x) => x.id === e.player_id);
-    return p ? (e!.source === "buyback" ? `${p.name} (buy-back)` : p.name) : "?";
+    return p ? (e!.source === "buyback" ? `${p.name} (buy-back)` : e!.source === "late" ? `${p.name} (late arrival)` : p.name) : "?";
   };
   const b = before.competition;
   const a = after.competition;
@@ -23,23 +23,23 @@ export function describeChanges(before: Snapshot, after: Snapshot): string[] {
   for (const m of before.matches) {
     const nm = after.matches.find((x) => x.id === m.id);
     if (!nm) {
-      out.push(`${matchLabel(m)} (${nameIn(before, m.player_a_id)} v ${nameIn(before, m.player_b_id)}) removed`);
+      out.push(`${matchLabel(before, m)} (${nameIn(before, m.player_a_id)} v ${nameIn(before, m.player_b_id)}) removed`);
       continue;
     }
     if (nm.player_a_id !== m.player_a_id || nm.player_b_id !== m.player_b_id) {
-      out.push(`${matchLabel(m)} is now ${nameIn(after, nm.player_a_id)} v ${nameIn(after, nm.player_b_id)}`);
+      out.push(`${matchLabel(before, m)} is now ${nameIn(after, nm.player_a_id)} v ${nameIn(after, nm.player_b_id)}`);
     }
     if (nm.state !== m.state) {
-      if (nm.state === "not_started") out.push(`${matchLabel(m)} reset to not started`);
-      else if (nm.state === "finished") out.push(`${matchLabel(m)} finished — ${nameIn(after, nm.winner_id)} wins`);
-      else out.push(`${matchLabel(m)} ${nm.state.replace("_", " ")}`);
+      if (nm.state === "not_started") out.push(`${matchLabel(before, m)} reset to not started`);
+      else if (nm.state === "finished") out.push(`${matchLabel(before, m)} finished — ${nameIn(after, nm.winner_id)} wins`);
+      else out.push(`${matchLabel(before, m)} ${nm.state.replace("_", " ")}`);
     } else if (nm.winner_id !== m.winner_id && nm.winner_id) {
-      out.push(`${matchLabel(m)} winner is now ${nameIn(after, nm.winner_id)}`);
+      out.push(`${matchLabel(before, m)} winner is now ${nameIn(after, nm.winner_id)}`);
     }
   }
   for (const m of after.matches) {
     if (!before.matches.some((x) => x.id === m.id)) {
-      out.push(`${matchLabel(m)} created (round ${m.round}): ${nameIn(after, m.player_a_id)} v ${nameIn(after, m.player_b_id)}`);
+      out.push(`${matchLabel(after, m)} created (round ${m.round}): ${nameIn(after, m.player_a_id)} v ${nameIn(after, m.player_b_id)}`);
     }
   }
   for (const e of before.entries) {

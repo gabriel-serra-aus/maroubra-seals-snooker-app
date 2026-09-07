@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { autoCloseDue, closeBuybacks } from "@/lib/logic/buybacks";
-import { abandonCompetition } from "@/lib/logic/competition";
+import { addLateArrival, closeBuybacks } from "@/lib/logic/buybacks";
+import { abandonCompetition, endCompetitionEarly } from "@/lib/logic/competition";
 import { boxOf, currentRound, matchNumberFor, positionOf, roundsFor, siblingHalf, slotRangeOf } from "@/lib/logic/derive";
-import { correctMatch } from "@/lib/logic/matchControl";
-import { hasMatch, makeCtx, match, play, playRound, playToEnd, slotEntry, startNight } from "./helpers";
+import { correctMatch, startMatch } from "@/lib/logic/matchControl";
+import { hasMatch, makeCtx, match, play, playRound, playToEnd, setupNight, slotEntry, startNight } from "./helpers";
 
 const ratings = (n: number) => Array.from({ length: n }, (_, i) => 20 + i);
 
@@ -31,24 +31,34 @@ describe("bracket geometry (spec 5.4, O-14)", () => {
   });
 });
 
-describe("auto-close (rules 11, spec 5.3)", () => {
-  it("closes once every first-draw player's round-one match is finished and decided", () => {
+describe("the window closes only on the organiser's tap (rules 11, spec 5.3, O-15)", () => {
+  it("stays open after every first-draw player's round-one match is finished; a late arrival still gets in", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(8) });
     play(s, ctx, 1, "a", "bought_back");
     play(s, ctx, 2, "a", "bought_back");
     play(s, ctx, 3, "a", "declined");
-    expect(autoCloseDue(s)).toBe(false);
-    const r = play(s, ctx, 4, "a", "declined");
-    expect(r.autoClose).not.toBeNull();
+    play(s, ctx, 4, "a", "declined");
+    expect(s.matches.filter((m) => m.round === 1 && m.state !== "finished")).toHaveLength(0);
+    expect(s.competition.buybacks_closed_at).toBeNull();
+    expect(s.freePasses).toHaveLength(0);
+    // The two buy-backs sit alone in two of M5..M8; a late arrival takes a third empty match (O-13).
+    s.players.push({ id: "late", name: "Late", rating: 30, active: true });
+    expect(addLateArrival(s, ctx, "late").match).toBeNull();
+    // The tap: all three lone players go through on a free pass, and the list is locked.
+    const r = closeBuybacks(s, ctx);
     expect(s.competition.buybacks_closed_at).not.toBeNull();
-    // The two buy-backs sit alone in two of M5..M8 and each goes through on a free pass.
-    expect(r.autoClose!.freePasses).toHaveLength(2);
+    expect(r.freePasses).toHaveLength(3);
+    s.players.push({ id: "later", name: "Later", rating: 30, active: true });
+    expect(() => addLateArrival(s, ctx, "later")).toThrow(/closed/);
   });
 
-  it("a waiting first-draw player does not hold the window open; they get a free pass (O-4)", () => {
+  it("a waiting first-draw player waits until the tap, then gets a free pass (O-4)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(3) });
     play(s, ctx, 1, "a", "declined");
-    expect(s.competition.buybacks_closed_at).not.toBeNull();
+    expect(s.competition.buybacks_closed_at).toBeNull();
+    expect(positionOf(s, slotEntry(s, 3).id)).toEqual({ status: "waiting", round: 1 });
+    expect(hasMatch(s, 9)).toBe(false);
+    closeBuybacks(s, ctx);
     expect(s.freePasses.filter((fp) => fp.from_round === 1)).toHaveLength(1);
     // The pass-holder (slot 3) and the M1 winner share round-two box 1: M9 forms at once.
     expect(currentRound(s)).toBe(2);
@@ -89,7 +99,7 @@ describe("advancement up the fixed tree (rules 4, 11; spec 5.4; O-14)", () => {
   it("9 players, no buy-backs: slot 9 reaches the final without playing (the documented consequence of O-14)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(9) });
     const nine = slotEntry(s, 9);
-    playRound(s, ctx); // M1..M4, all declined → auto-close
+    playRound(s, ctx); // M1..M4, all declined; the helper then taps No More Buy-Backs / Late Entries
     expect(s.freePasses.filter((fp) => fp.entry_id === nine.id).map((fp) => fp.from_round)).toEqual([1, 2, 3]);
     expect(positionOf(s, nine.id)).toEqual({ status: "waiting", round: 4 });
     expect(s.matches.filter((m) => m.round === 2).map((m) => m.number)).toEqual([9, 10]);
@@ -152,5 +162,50 @@ describe("abandon (O-7, spec 5.11)", () => {
     expect(s.matches).toHaveLength(3);
     expect(ctx.log.map((l) => l.action)).toEqual(["abandon"]);
     expect(() => abandonCompetition(s, ctx)).toThrow(/running/);
+  });
+});
+
+describe("end night here (spec 5.11)", () => {
+  it("closes the night as complete with no winner, keeps every result, logs the actor", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(8) });
+    playRound(s, ctx);
+    play(s, ctx, 9, "a");
+    const finished = s.matches.filter((m) => m.state === "finished").length;
+    const r = endCompetitionEarly(s, ctx);
+    expect(s.competition.status).toBe("complete");
+    expect(s.competition.completed_at).not.toBeNull();
+    // Complete, but nobody won the final: that is what "completed (unfinished)" reads from.
+    expect(s.competition.winner_entry_id).toBeNull();
+    expect(s.matches.filter((m) => m.state === "finished")).toHaveLength(finished);
+    expect(r.unplayed).toBe(s.matches.filter((m) => m.state !== "finished").length);
+    expect(r.standing.length).toBeGreaterThan(0);
+    expect(ctx.log.map((l) => l.action)).toContain("end_early");
+    expect(() => endCompetitionEarly(s, ctx)).toThrow(/running/);
+  });
+
+  it("throws away the clock of a match still in play, like a cancel start (O-5)", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(8) });
+    startMatch(s, ctx, match(s, 1).id);
+    startMatch(s, ctx, match(s, 2).id);
+    const r = endCompetitionEarly(s, ctx);
+    expect(r.cancelled).toBe(2);
+    expect(match(s, 1).state).toBe("not_started");
+    expect(match(s, 1).started_at).toBeNull();
+    expect(match(s, 2).started_at).toBeNull();
+  });
+
+  it("still names the players who were left standing", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
+    play(s, ctx, 1, "a", "declined");
+    const winner = s.players.find((p) => p.id === s.entries.find((e) => e.id === match(s, 1).winner_id)!.player_id)!;
+    const r = endCompetitionEarly(s, ctx);
+    expect(r.standing).toContain(winner.name);
+    // The round-one loser who declined a buy-back is out, so they are not standing.
+    expect(r.standing).toHaveLength(3);
+  });
+
+  it("is refused before the competition starts", () => {
+    const { s, ctx } = setupNight({ bracket: 16, ratings: ratings(4) });
+    expect(() => endCompetitionEarly(s, ctx)).toThrow(/running/);
   });
 });

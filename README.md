@@ -60,7 +60,7 @@ The bracket logic lives in `lib/logic/` as pure functions and carries the tests 
 
 ```
 app/                Next.js App Router: pages under app/admin, API routes under app/api
-components/         client components (bracket list and tree, dialogs, timer, settings, override panel)
+components/         client components (bracket list and tree, dialogs, settings, override panel)
 lib/logic/          pure bracket logic (draw, placement, close, the fixed tree, Force Pair, complete/correct, ratings, override)
 lib/db/             Postgres adapter (postgres.js / PGlite), snapshot loader, diff writer
 lib/auth/           ADMIN_CODES parsing and the signed session cookie

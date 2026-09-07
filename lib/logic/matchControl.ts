@@ -1,7 +1,7 @@
-// Match state machine (rules 12, spec 4.1): Start, time limit, Cancel start (O-5), Complete, Correct (O-6).
+// Match state machine (rules 12, spec 4.1): Start, time limit, Cancel start (O-5), Complete, Review result (O-6).
 
 import { badRequest, conflict, notFound } from "./errors";
-import { autoCloseDue, closeBuybacks, createBuybackEntry, type CloseResult } from "./buybacks";
+import { createBuybackEntry } from "./buybacks";
 import {
   buybackEntryOf,
   buybacksOpen,
@@ -12,7 +12,7 @@ import {
   opponentOf,
   removeMatch,
 } from "./derive";
-import { advanceAll, advancementOf, unwindAdvance, type Advancement, type AdvanceResult } from "./rounds";
+import { advanceAll, advancementOf, unwindAdvance, type Advancement } from "./rounds";
 import type { BuybackDecision, Ctx, EntryRow, MatchRow, Snapshot } from "./types";
 
 export type LoserDecision = Extract<BuybackDecision, "bought_back" | "declined">;
@@ -26,7 +26,7 @@ function getMatch(s: Snapshot, matchId: string): MatchRow {
 /** Start (rules 12): green, clock running from the frozen limit. */
 export function startMatch(s: Snapshot, ctx: Ctx, matchId: string, timeLimitMinutes?: number): MatchRow {
   const m = getMatch(s, matchId);
-  if (m.state !== "not_started") throw conflict(`${matchLabel(m)} has already started`);
+  if (m.state !== "not_started") throw conflict(`${matchLabel(s, m)} has already started`);
   m.time_limit_minutes = timeLimitMinutes ?? m.time_limit_minutes ?? s.competition.default_time_limit_minutes;
   m.started_at = ctx.now;
   m.state = "in_play";
@@ -48,13 +48,13 @@ export function cancelStart(s: Snapshot, ctx: Ctx, matchId: string): MatchRow {
   m.started_at = null;
   m.time_limit_minutes = null;
   m.state = "not_started";
-  ctx.log.push({ action: "cancel_start", details: { match: matchLabel(m), round: m.round } });
+  ctx.log.push({ action: "cancel_start", details: { match: matchLabel(s, m), round: m.round } });
   return m;
 }
 
-/** Whether a round-one loser is offered the buy-back choice (rules 3, spec 3.5). */
+/** Whether a round-one loser is offered the buy-back choice (rules 3, spec 3.5): first-draw and late-arrival entries alike, once. */
 export function loserEligibleForBuyback(s: Snapshot, m: MatchRow, loser: EntryRow): boolean {
-  return m.round === 1 && loser.source === "draw" && buybacksOpen(s) && !buybackEntryOf(s, loser.player_id);
+  return m.round === 1 && loser.source !== "buyback" && buybacksOpen(s) && !buybackEntryOf(s, loser.player_id);
 }
 
 export interface DecisionOutcome {
@@ -92,22 +92,9 @@ function applyLoserDecision(s: Snapshot, ctx: Ctx, m: MatchRow, loser: EntryRow,
   return { decision: "bought_back", buybackEntryId: entry.id, buybackMatch: match };
 }
 
-/** Automatic transitions that follow any write (spec 7.4): auto-close (5.3) then advancement (5.4). */
-export function runAutomatics(s: Snapshot, ctx: Ctx, opts: { checkAutoClose: boolean } = { checkAutoClose: true }): { autoClose: CloseResult | null; advance: AdvanceResult } {
-  let autoClose: CloseResult | null = null;
-  if (opts.checkAutoClose && autoCloseDue(s)) autoClose = closeBuybacks(s, ctx);
-  const advance = advanceAll(s, ctx);
-  if (autoClose) {
-    advance.matches.unshift(...autoClose.matchesCreated);
-    advance.freePasses.unshift(...autoClose.allPasses);
-  }
-  return { autoClose, advance };
-}
-
 export interface CompleteResult {
   match: MatchRow;
   loser: DecisionOutcome;
-  autoClose: CloseResult | null;
   /** Where the winner went: their next match, awaiting an opponent, a free pass, or the night's winner. */
   winnerTo: Advancement;
   completed: boolean;
@@ -117,7 +104,7 @@ export interface CompleteResult {
 export function completeMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: string, decision?: LoserDecision): CompleteResult {
   const m = getMatch(s, matchId);
   if (m.state === "not_started") throw conflict("A result cannot be entered on a match that has not started");
-  if (m.state === "finished") throw conflict(`${matchLabel(m)} is already finished — use Correct result`);
+  if (m.state === "finished") throw conflict(`${matchLabel(s, m)} is already finished — use Review result`);
   if (winnerId !== m.player_a_id && winnerId !== m.player_b_id) throw badRequest("The winner must be a player of the match");
   const loser = entryById(s, opponentOf(m, winnerId));
   validateDecision(s, m, loser, decision);
@@ -125,20 +112,21 @@ export function completeMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: 
   m.finished_at = ctx.now;
   m.winner_id = winnerId;
   const loserOutcome = applyLoserDecision(s, ctx, m, loser, decision);
-  const auto = runAutomatics(s, ctx);
-  return { match: m, loser: loserOutcome, autoClose: auto.autoClose, winnerTo: advancementOf(s, winnerId, m.round), completed: s.competition.status === "complete" };
+  // The buy-back window is untouched by a result: only the organiser's tap closes it (O-15).
+  advanceAll(s, ctx);
+  return { match: m, loser: loserOutcome, winnerTo: advancementOf(s, winnerId, m.round), completed: s.competition.status === "complete" };
 }
 
-/** Why Correct result is unavailable, or null when it is allowed (spec 5.7, O-6). */
+/** Why Review result is unavailable, or null when it is allowed (spec 5.7, O-6). */
 export function correctionBlockedReason(s: Snapshot, m: MatchRow): string | null {
   if (m.state !== "finished" || !m.winner_id) return "Only a finished match can be corrected";
   const started = matchesOf(s, m.winner_id).find((x) => x.round > m.round && x.state !== "not_started");
-  if (started) return `Result locked: ${matchLabel(started)} has started`;
+  if (started) return `Result locked: ${matchLabel(s, started)} has started`;
   const loser = entryById(s, opponentOf(m, m.winner_id));
   const buyback = m.round === 1 ? s.entries.find((e) => e.rebuy_of_entry_id === loser.id) : undefined;
   if (buyback) {
     const bbStarted = matchesOf(s, buyback.id).find((x) => x.state !== "not_started");
-    if (bbStarted) return `Loser's buy-back match ${matchLabel(bbStarted)} already started`;
+    if (bbStarted) return `Loser's buy-back match ${matchLabel(s, bbStarted)} already started`;
   }
   return null;
 }
@@ -148,7 +136,7 @@ function releaseBuyback(s: Snapshot, ctx: Ctx, loser: EntryRow): void {
   const bb = s.entries.find((e) => e.rebuy_of_entry_id === loser.id);
   if (!bb) return;
   for (const x of matchesOf(s, bb.id)) {
-    if (x.state !== "not_started") throw conflict(`Loser's buy-back match ${matchLabel(x)} already started`);
+    if (x.state !== "not_started") throw conflict(`Loser's buy-back match ${matchLabel(s, x)} already started`);
     removeMatch(s, x);
   }
   s.freePasses = s.freePasses.filter((fp) => fp.entry_id !== bb.id);
@@ -193,6 +181,6 @@ export function correctMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: s
     loserOutcome = applyLoserDecision(s, ctx, m, newLoser, decision);
   }
   m.corrected_at = ctx.now;
-  const auto = runAutomatics(s, ctx);
-  return { match: m, loser: loserOutcome, autoClose: auto.autoClose, winnerTo: advancementOf(s, winnerId, m.round), completed: s.competition.status === "complete" };
+  advanceAll(s, ctx);
+  return { match: m, loser: loserOutcome, winnerTo: advancementOf(s, winnerId, m.round), completed: s.competition.status === "complete" };
 }

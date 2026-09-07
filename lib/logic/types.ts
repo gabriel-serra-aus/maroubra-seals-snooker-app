@@ -5,7 +5,8 @@ import type { Rng } from "./random";
 
 export type MatchState = "not_started" | "in_play" | "finished";
 export type CompetitionStatus = "setup" | "in_progress" | "complete" | "abandoned";
-export type EntrySource = "draw" | "buyback";
+/** draw = the first draw; late = joined after the draw (rules 3, 8.3), still entitled to one buy-back; buyback = a round-one loser re-entering. */
+export type EntrySource = "draw" | "late" | "buyback";
 export type BuybackDecision = "bought_back" | "declined" | "no_slots";
 /** How a match came to exist: the draw, a buy-back placement, Force Pair, a close, advancement up the tree, a correction, an override. */
 export type MatchOrigin = "draw" | "placement" | "force_pair" | "close" | "advance" | "correction" | "override";

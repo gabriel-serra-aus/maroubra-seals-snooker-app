@@ -64,7 +64,7 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     const w1 = match(s, 1).winner_id!;
     const w3 = match(s, 3).winner_id!;
     expect(() => overridePair(s, ctx, w1, w3)).toThrow(/different parts of the bracket/);
-    play(s, ctx, 2, "a", "declined"); // → M9, and the window auto-closes
+    play(s, ctx, 2, "a", "declined"); // → M9 forms while the window is still open
     expect(() => overrideDeleteMatch(s, ctx, match(s, 9).id)).toThrow(/round-one match/);
   });
 
@@ -91,8 +91,10 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     s.players.push({ id: "late", name: "Late", rating: 30, active: true });
     const e = overrideAddPlayer(s, ctx, "late");
     expect(s.competition.bracket_size).toBe(32);
-    expect(e.slot).toBe(17);
-    // Buy-backs are closed, so the newcomer is alone in M9 and climbs the empty bottom half to the final.
+    // A random empty match of the new bottom half (O-13 applies to the override too), its lower seat.
+    expect(e.slot).toBeGreaterThanOrEqual(17);
+    expect(e.slot! % 2).toBe(1);
+    // Buy-backs are closed, so the newcomer is alone in their match and climbs the empty bottom half to the final.
     expect(halfFullPairs(s)).toEqual([]);
     expect(s.freePasses.filter((fp) => fp.entry_id === e.id).map((fp) => fp.from_round)).toEqual([1, 2, 3, 4]);
     expect(positionOf(s, e.id)).toEqual({ status: "waiting", round: 5 });
@@ -132,7 +134,7 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     const m1 = match(s, 1);
     const winner = s.entries.find((e) => e.id === m1.winner_id)!;
     const changes = overrideRemovePlayer(s, ctx, winner.player_id);
-    expect(changes).toEqual(expect.arrayContaining(["M9 deleted", "M1 voided", "entry removed"]));
+    expect(changes).toEqual(expect.arrayContaining(["R2M1 deleted", "R1M1 voided", "entry removed"]));
     expect(s.matches.filter((m) => m.round === 1).map((m) => m.number)).toEqual([2]);
     expect(s.entries.some((e) => e.id === winner.id)).toBe(false);
     // Round one is closed, so the M1 loser, now without an opponent, goes through (O-4) into M9 with M2's winner.
@@ -146,7 +148,7 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     playRound(s, ctx);
     startMatch(s, ctx, match(s, 9).id);
     const winner = s.entries.find((e) => e.id === match(s, 1).winner_id)!;
-    expect(() => overrideRemovePlayer(s, ctx, winner.player_id)).toThrow(/M9/);
+    expect(() => overrideRemovePlayer(s, ctx, winner.player_id)).toThrow(/R2M1/);
   });
 
   it("a removed loser's finished match stays as history", () => {
@@ -173,7 +175,8 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(3) });
     expect(() => overrideReopenBuybacks(s, ctx)).toThrow(/already open/);
     const gus = slotEntry(s, 3);
-    play(s, ctx, 1, "a", "declined"); // auto-close: Gus passes into M9 against the M1 winner
+    play(s, ctx, 1, "a", "declined");
+    closeBuybacks(s, ctx); // Gus passes into M9 against the M1 winner
     expect(hasMatch(s, 9)).toBe(true);
     overrideReopenBuybacks(s, ctx);
     expect(s.competition.buybacks_closed_at).toBeNull();
@@ -183,6 +186,21 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     expect(currentRound(s)).toBe(1);
     closeBuybacks(s, ctx);
     startMatch(s, ctx, match(s, 9).id);
-    expect(() => overrideReopenBuybacks(s, ctx)).toThrow(/M9 has started/);
+    expect(() => overrideReopenBuybacks(s, ctx)).toThrow(/R2M1 has started/);
+  });
+});
+
+describe("override add player follows the placement rule (spec 5.2, O-13)", () => {
+  it("13 of 16: an added player takes the empty M8, not the seat beside the lone first-draw player in M7", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(13) });
+    s.players.push({ id: "late", name: "Late", rating: 30, active: true });
+    const e = overrideAddPlayer(s, ctx, "late");
+    expect(e.slot).toBe(15);
+    expect(halfFullPairs(s).map((h) => h.number)).toEqual([7, 8]);
+    // Nothing empty is left now: the next one sits beside a lone player, at random.
+    s.players.push({ id: "later", name: "Later", rating: 30, active: true });
+    const e2 = overrideAddPlayer(s, ctx, "later");
+    expect([14, 16]).toContain(e2.slot);
+    expect(halfFullPairs(s)).toHaveLength(1);
   });
 });

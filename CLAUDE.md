@@ -10,16 +10,18 @@ Three documents define this project. **Read them before changing behaviour — d
 - [snooker-comp-rules.md](snooker-comp-rules.md) — the competition rules.
   - **Part A** = player-facing rules (format, fees, buy-backs, time limit, handicaps, conduct).
   - **Part B** = the app specification (setup/start, buy-back placement, Force Pair, closing buy-backs and the fixed bracket, timer and match states, handicap ratings). Part B section numbers 8–13 are the functional requirements; cite them in code comments and PRs.
-- [functional-spec.md](functional-spec.md) — screens, state machines, bracket logic, data model, routes. It carries the organiser's rulings on everything the other two left open, numbered O-1 … O-14; cite those the same way (e.g. "per O-4").
+- [functional-spec.md](functional-spec.md) — screens, state machines, bracket logic, data model, routes. It carries the organiser's rulings on everything the other two left open, numbered O-1 … O-15; cite those the same way (e.g. "per O-4").
 - [tournament-app-plan.md](tournament-app-plan.md) — hosting, framework, database, admin access, cost.
 
-If they conflict, the rules file wins on behaviour and the plan file wins on infrastructure — **except** where the functional spec records an organiser ruling, which supersedes both. All three files have been synced to the O-1 … O-14 rulings (spec 10.2 lists what changed in the rules file), so a disagreement between them now means one of them is stale — fix it rather than picking a side. If a requirement is genuinely absent from all three, ask the organiser rather than inventing one.
+If they conflict, the rules file wins on behaviour and the plan file wins on infrastructure — **except** where the functional spec records an organiser ruling, which supersedes both. All three files have been synced to the O-1 … O-15 rulings (spec 10.2 lists what changed in the rules file), so a disagreement between them now means one of them is stale — fix it rather than picking a side. If a requirement is genuinely absent from all three, ask the organiser rather than inventing one.
 
 ## The domain in one paragraph
 
-16 or 32 players are drawn at random into a round-one bracket. Every match is one frame with a 25-minute clock. **A rating is a golf-style handicap: lower is better, and it can be negative.** The weaker player — the one with the *higher* number — starts with two thirds of the difference, rounded (§6 says "lower-rated player", meaning lower in ability; spec 5.6). Round-one losers may buy back once, optionally, and go straight into the bracket: a random empty match while one exists, then beside a random lone player (O-13); round-two losers are out. Buy-backs are capped by the open slots, first come first served. **The bracket is fixed** (O-14): a player's round-one slot sets their place in the whole tree, the winners of M1 and M2 meet in round two, and a winner moves up the moment their match ends. A free pass is what an empty other half gives you, in any round, possibly several in a row; when the buy-back window closes everyone still alone in round one gets one (O-4). The organiser starts and completes each match in the app.
+16 or 32 players are drawn at random into a round-one bracket. Every match is one frame with a 25-minute clock. **A rating is a golf-style handicap: lower is better, and it can be negative.** The weaker player — the one with the *higher* number — starts with two thirds of the difference, rounded (§6 says "lower-rated player", meaning lower in ability; spec 5.6). Round-one losers may buy back once, optionally, and go straight into the bracket: a random empty match while one exists, then beside a random lone player (O-13); round-two losers are out. Buy-backs are capped by the open slots, first come first served. **The bracket is fixed** (O-14): a player's round-one slot sets their place in the whole tree, the winners of M1 and M2 meet in round two, and a winner moves up the moment their match ends. A free pass is what an empty other half gives you, in any round, possibly several in a row; when the buy-back window closes everyone still alone in round one gets one (O-4). The window closes only when the organiser taps **No More Buy-Backs / Late Entries**, never by itself, so late entries and buy-backs are taken right through round one (O-15). The organiser starts and completes each match in the app.
 
-Vocabulary used throughout code and UI (keep it consistent with the rules doc): **waiting player**, **buy-back**, **free pass**, **Force Pair**, **Close Buy-Backs**, **bracket size**, **slot**, **box** (a position in the tree), **rating**, **start** (the handicap head start), **master override**.
+A **late arrival** joins after the draw through Add late arrival: they take an open slot and are placed like a buy-back, but are a `late` entry, not a buy-back, and may still buy back once if they lose (§3, §8.3). A round-one loser who changes their mind buys back through Review result on their match, not through that button.
+
+Vocabulary used throughout code and UI (keep it consistent with the rules doc): **waiting player**, **buy-back**, **late arrival**, **free pass**, **Force Pair**, **Close Buy-Backs** (the button reads "No More Buy-Backs / Late Entries"), **End night here** (closing a night that ran out of time: complete, no winner, "completed (unfinished)" — O-16, and not the same thing as **Abandon**), **bracket size**, **slot**, **box** (a position in the tree), **rating**, **start** (the handicap head start), **master override**.
 
 ## Stack
 
@@ -65,7 +67,7 @@ UI can be checked by hand; the logic cannot.
 ## Deployment
 
 1. Push to GitHub; connect the repo to Netlify.
-2. Set env vars in Netlify: `ADMIN_CODES`, `CRON_SECRET` and `DATABASE_URL` (the Supabase transaction-pooler connection string). `DATABASE_URL` carries the database password and is **server-only** — never expose it to the browser or prefix it with `NEXT_PUBLIC_`. Apply the schema with `npm run db:migrate` against the **session**-pooler URL (port 5432); it applies every file in `supabase/migrations/` not yet recorded, so run it again whenever a migration is added (`0002_fixed_bracket.sql` is pending on production until then). Set the **Netlify functions region to Sydney** in Site configuration — the database is in Sydney and the default region is in the US.
+2. Set env vars in Netlify: `ADMIN_CODES`, `CRON_SECRET` and `DATABASE_URL` (the Supabase transaction-pooler connection string). `DATABASE_URL` carries the database password and is **server-only** — never expose it to the browser or prefix it with `NEXT_PUBLIC_`. Apply the schema with `npm run db:migrate` against the **session**-pooler URL (port 5432); it applies every file in `supabase/migrations/` not yet recorded, so run it again whenever a migration is added (`0003_late_arrivals.sql`, which adds the `late` entry source, is pending on production until then). Set the **Netlify functions region to Sydney** in Site configuration — the database is in Sydney and the default region is in the US.
 3. `main` deploys to production; branches get deploy previews. Rotate one organiser's code by updating `ADMIN_CODES` and redeploying — it logs out only that person.
 4. A daily Netlify scheduled function pings the database so the free Supabase project doesn't pause.
 5. Never commit `.env*` files or real credentials.
@@ -75,3 +77,13 @@ UI can be checked by hand; the logic cannot.
 - Ask before adding a dependency, a hosting service, or a paid tier — cheap and self-contained is a hard requirement of the plan.
 - Reference rules sections (e.g. "per §10") and organiser rulings (e.g. "per O-4") when implementing or changing behaviour.
 - Keep this file short. Details belong in the three source documents or in the code.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

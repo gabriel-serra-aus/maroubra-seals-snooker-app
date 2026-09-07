@@ -56,8 +56,6 @@ export function completeResponse(r: CompleteResult) {
     loser_decision: r.loser.decision,
     no_slots: r.loser.decision === "no_slots",
     buyback_match_number: r.loser.buybackMatch?.number ?? null,
-    auto_closed: r.autoClose !== null,
-    free_passes: r.autoClose?.freePasses.length ?? 0,
     winner_to: advancementJson(r.winnerTo),
     completed: r.completed,
   };

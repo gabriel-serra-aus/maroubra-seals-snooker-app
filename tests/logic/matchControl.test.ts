@@ -118,7 +118,7 @@ describe("correct result (rules 12, O-6, spec 5.7)", () => {
     const m9 = match(s, 9);
     startMatch(s, ctx, m9.id);
     const m1 = match(s, 1);
-    expect(correctionBlockedReason(s, m1)).toMatch(/Result locked: M9 has started/);
+    expect(correctionBlockedReason(s, m1)).toMatch(/Result locked: R2M1 has started/);
     const other = m1.player_a_id === m1.winner_id ? m1.player_b_id : m1.player_a_id;
     expect(() => correctMatch(s, ctx, m1.id, other)).toThrow(/Result locked/);
   });
@@ -150,7 +150,7 @@ describe("correct result (rules 12, O-6, spec 5.7)", () => {
     expect(r.loser.buybackMatch?.number).toBe(8);
     startMatch(s, ctx, match(s, 8).id);
     const m1 = match(s, 1);
-    expect(correctionBlockedReason(s, m1)).toMatch(/buy-back match M8 already started/);
+    expect(correctionBlockedReason(s, m1)).toMatch(/buy-back match R1M8 already started/);
     expect(() => correctMatch(s, ctx, m1.id, m1.player_b_id, "declined")).toThrow(/already started/);
   });
 

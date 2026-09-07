@@ -88,7 +88,7 @@ export async function applySnapshotDiff(q: Queryable, before: Snapshot, after: S
   await updateRows(q, "entries", entries.updates, ENTRY_COLS);
   await deleteRows(q, "entries", entries.deletes.filter((e) => e.rebuy_of_entry_id));
   await deleteRows(q, "entries", entries.deletes.filter((e) => !e.rebuy_of_entry_id));
-  // 3. Inserts: draw-source entries before the buy-backs that reference them.
+  // 3. Inserts: first-life entries (draw, late) before the buy-backs that reference them.
   await insertRows(q, "entries", entries.inserts.filter((e) => !e.rebuy_of_entry_id), ENTRY_COLS);
   await insertRows(q, "entries", entries.inserts.filter((e) => e.rebuy_of_entry_id), ENTRY_COLS);
   await insertRows(q, "matches", matches.inserts, MATCH_COLS);
