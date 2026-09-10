@@ -1,4 +1,4 @@
--- Maroubra Seals Snooker — initial schema. This is the data model in functional-spec.md section 6 (O-2).
+-- Maroubra Seals Snooker — initial schema. This is the data model in spec.md section 6 (O-2).
 -- Keep section 6 in sync with this file.
 
 create type match_state as enum ('not_started', 'in_play', 'finished');

@@ -1,4 +1,4 @@
-// ADMIN_CODES: "Name:code,Name:code" — one code per organiser, the code identifies who (O-8, spec 8.2).
+// ADMIN_CODES: "Name:code,Name:code" — one code per organiser, the code identifies who (O-8; CLAUDE.md, Deployment).
 // ADMIN_CODE: optional single unnamed fallback, treated as "Organiser:{value}".
 
 export interface Organiser {

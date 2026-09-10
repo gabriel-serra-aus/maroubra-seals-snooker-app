@@ -9,7 +9,7 @@ import {
 
 const organisers = parseAdminCodes({ ADMIN_CODES: "Gabriel:kf83hs2bxxxx,Steve:pw9dk21myyyy" });
 
-describe("ADMIN_CODES parsing (O-8, spec 8.2)", () => {
+describe("ADMIN_CODES parsing (O-8; CLAUDE.md, Deployment)", () => {
   it("parses Name:code pairs", () => {
     expect(organisers).toEqual([
       { name: "Gabriel", code: "kf83hs2bxxxx" },
