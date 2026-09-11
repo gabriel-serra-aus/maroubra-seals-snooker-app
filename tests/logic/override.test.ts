@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { closeBuybacks } from "@/lib/logic/buybacks";
 import { currentRound, halfFullPairs, openSlots, positionOf, waitingEntries } from "@/lib/logic/derive";
-import { startMatch } from "@/lib/logic/matchControl";
 import {
   growBracket,
   openPlaces,
@@ -15,7 +14,7 @@ import {
   overrideResetMatch,
   overrideRevokeFreePass,
 } from "@/lib/logic/override";
-import { hasMatch, match, play, playRound, slotEntry, startNight } from "./helpers";
+import { hasMatch, match, play, playRound, slotEntry, startNight, startOn } from "./helpers";
 
 const ratings = (n: number) => Array.from({ length: n }, (_, i) => 20 + i);
 
@@ -24,7 +23,7 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
     playRound(s, ctx);
     const m9 = match(s, 9);
-    startMatch(s, ctx, m9.id);
+    startOn(s, ctx, m9.id);
     const m1 = match(s, 1);
     const w1 = m1.winner_id!;
     overrideResetMatch(s, ctx, m1.id);
@@ -73,7 +72,7 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     const m1 = match(s, 1);
     const waiter = slotEntry(s, 3);
     const outId = m1.player_a_id;
-    startMatch(s, ctx, m1.id);
+    startOn(s, ctx, m1.id);
     overrideReplacePlayer(s, ctx, m1.id, "a", waiter.id);
     expect(m1.player_a_id).toBe(waiter.id);
     expect(m1.state).toBe("in_play");
@@ -146,7 +145,7 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
   it("remove refuses, naming the match, when the cascade cannot go far enough", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
     playRound(s, ctx);
-    startMatch(s, ctx, match(s, 9).id);
+    startOn(s, ctx, match(s, 9).id);
     const winner = s.entries.find((e) => e.id === match(s, 1).winner_id)!;
     expect(() => overrideRemovePlayer(s, ctx, winner.player_id)).toThrow(/R2M1/);
   });
@@ -185,7 +184,7 @@ describe("master override (O-5, spec 3.9, 5.10)", () => {
     expect(positionOf(s, gus.id)).toEqual({ status: "waiting", round: 1 });
     expect(currentRound(s)).toBe(1);
     closeBuybacks(s, ctx);
-    startMatch(s, ctx, match(s, 9).id);
+    startOn(s, ctx, match(s, 9).id);
     expect(() => overrideReopenBuybacks(s, ctx)).toThrow(/R2M1 has started/);
   });
 });

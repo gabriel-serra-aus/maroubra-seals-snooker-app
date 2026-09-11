@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getDb, resetDbForTests } from "@/lib/db/client";
 import { competitionHistory } from "@/lib/db/history";
-import { api, find, loginAs, playCurrentRound, playMatch, setCookie } from "./api";
+import { api, find, loginAs, playCurrentRound, playMatch, setCookie, freeTable } from "./api";
 
 const NAMES = ["Alice Chen", "Bob Smith", "Carl Diaz", "Dee Park", "Eve Long", "Fay Ng", "Gus Ray", "Hal Ito", "Ida Roy", "Ivan Poe", "Jo Kerr", "Kim Lau", "Lee Moss", "Max Bell", "Nia Ford", "Oli Hart", "Pat Quin"];
 const RATINGS = [45, 20, 33, 30, 28, 41, 25, 36, 36, 28, 38, 22, 50, -3, 15, 44, 31];
@@ -119,14 +119,39 @@ describe("a 13-of-16 night, end to end", () => {
     const m1 = find.match(b, 1);
     expect((await api.complete(m1.id, m1.a.entry_id, "declined")).status).toBe(409); // not started
     expect((await api.patchMatch(m1.id, { time_limit_minutes: 30 })).status).toBe(200);
-    const st = await api.startMatch(m1.id);
+    // A table must be chosen, and it must be free (spec 5.14).
+    const noTable = await api.startMatch(m1.id);
+    expect(noTable.status).toBe(400);
+    expect(noTable.body.error).toMatch(/Choose a free table for R1M1: 1, 2, 3, 4/);
+    expect((await api.startMatch(m1.id, { table: 5 })).status).toBe(400);
+    const st = await api.startMatch(m1.id, { table: 1 });
     expect(st.status).toBe(200);
     expect(st.body.time_limit_minutes).toBe(30);
-    expect((await api.startMatch(m1.id)).status).toBe(409); // double tap
+    // Every write bumps the night's version (spec 7.2), so a screen can drop a bracket read before it.
+    expect(b.version).not.toBe("");
+    expect(st.body.bracket.version > b.version).toBe(true);
+    expect((await api.bracket(comp)).body.version).toBe(st.body.bracket.version);
+    // Tables (spec 5.14): four by default, chosen at Start, never shared, movable while in play.
+    expect(b.competition?.table_count).toBe(4);
+    expect(st.body.table_number).toBe(1);
+    const m2 = find.match(b, 2);
+    const clash = await api.startMatch(m2.id, { table: 1 });
+    expect(clash.status).toBe(409);
+    expect(clash.body.error).toMatch(/Table 1 is in use by R1M1/);
+    expect((await api.patchMatch(m1.id, { table_number: 5 })).status).toBe(400);
+    const moved = await api.patchMatch(m1.id, { table_number: 3 });
+    expect(moved.status).toBe(200);
+    expect(find.match(moved.body.bracket, 1).table_number).toBe(3);
+    expect((await api.patchCompetition(comp, { table_count: 2 })).status).toBe(409); // table 3 is in play
+    const fewer = await api.patchCompetition(comp, { table_count: 3 });
+    expect(fewer.status).toBe(200);
+    expect(fewer.body.bracket.competition?.table_count).toBe(3);
+    expect((await api.patchCompetition(comp, { table_count: 4 })).status).toBe(200);
+    expect((await api.startMatch(m1.id, { table: 2 })).status).toBe(409); // double tap
     expect((await api.patchMatch(m1.id, { time_limit_minutes: 20 })).status).toBe(409);
     const cancel = await api.cancelStart(m1.id);
     expect(cancel.status).toBe(200);
-    expect(find.match(cancel.body.bracket, 1)).toMatchObject({ state: "not_started", started_at: null, time_limit_minutes: 25 });
+    expect(find.match(cancel.body.bracket, 1)).toMatchObject({ state: "not_started", started_at: null, time_limit_minutes: 25, table_number: null });
     const actions = (await api.adminActions(comp)).body.actions;
     expect(actions[0]).toMatchObject({ actor: "Gabriel", action: "cancel_start", details: { match: "R1M1" } });
 
@@ -155,7 +180,7 @@ describe("a 13-of-16 night, end to end", () => {
     // Missing decision → 400 and nothing changes.
     b = (await api.bracket(comp)).body;
     const m5 = find.match(b, 5);
-    await api.startMatch(m5.id);
+    await api.startMatch(m5.id, { table: freeTable(b) });
     expect((await api.complete(m5.id, m5.a.entry_id)).status).toBe(400);
     expect(find.match((await api.bracket(comp)).body, 5).state).toBe("in_play");
     expect((await api.complete(m5.id, m5.a.entry_id, "declined")).status).toBe(200);

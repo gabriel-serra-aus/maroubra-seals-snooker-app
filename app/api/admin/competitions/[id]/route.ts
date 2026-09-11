@@ -5,6 +5,7 @@ import { mutateCompetition, readSnapshot } from "@/lib/api/mutate";
 import { optionalInt, optionalString } from "@/lib/api/validate";
 import { buildBracketPayload } from "@/lib/bracket/payload";
 import { conflict, notFound } from "@/lib/logic/errors";
+import { setTableCount } from "@/lib/logic/tables";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export const PATCH = handle(async (request, { params }) => {
   const size = optionalInt(body, "bracket_size", 16, 32);
   if (size !== undefined && size !== 16 && size !== 32) return json({ error: "bracket_size must be 16 or 32" }, { status: 400 });
   const limit = optionalInt(body, "default_time_limit_minutes", 1, 180);
+  const tables = optionalInt(body, "table_count", 1, 16);
   const rating = {
     rating_top_count: optionalInt(body, "rating_top_count", 0, 64),
     rating_top_delta: optionalInt(body, "rating_top_delta", -50, 50),
@@ -35,6 +37,7 @@ export const PATCH = handle(async (request, { params }) => {
     if (c.status === "complete" || c.status === "abandoned") throw conflict("This competition is over");
     if (name) c.name = name;
     if (limit !== undefined) c.default_time_limit_minutes = limit;
+    if (tables !== undefined) setTableCount(s, tables);
     const settingsChanged = size !== undefined || Object.values(rating).some((v) => v !== undefined);
     if (settingsChanged && c.status !== "setup") throw conflict("The bracket size and rating scale can only be changed before Start");
     if (size !== undefined) {

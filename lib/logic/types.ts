@@ -25,6 +25,8 @@ export interface CompetitionRow {
   status: CompetitionStatus;
   bracket_size: BracketSize;
   default_time_limit_minutes: number;
+  /** Snooker tables the club plays on tonight, numbered 1..table_count (spec 5.14). */
+  table_count: number;
   rating_top_count: number;
   rating_top_delta: number;
   rating_bottom_count: number;
@@ -35,6 +37,8 @@ export interface CompetitionRow {
   abandoned_at: Date | null;
   winner_entry_id: string | null;
   created_at: Date;
+  /** Bumped by every write to the night (lib/api/mutate.ts); the bracket JSON carries it as `version` (spec 7.2). */
+  updated_at: Date;
 }
 
 export interface EntryRow {
@@ -66,6 +70,8 @@ export interface MatchRow {
   state: MatchState;
   origin: MatchOrigin;
   time_limit_minutes: number | null;
+  /** The table the match is (or was) played on; set at Start, cleared by Cancel start (spec 5.14). */
+  table_number: number | null;
   started_at: Date | null;
   finished_at: Date | null;
   winner_id: string | null;

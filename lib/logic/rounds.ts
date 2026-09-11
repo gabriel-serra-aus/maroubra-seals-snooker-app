@@ -138,6 +138,7 @@ export function resetMatchInternal(s: Snapshot, ctx: Ctx, m: MatchRow, opts: { f
   m.finished_at = null;
   m.started_at = null;
   m.time_limit_minutes = null;
+  m.table_number = null;
 }
 
 export function completeCompetition(s: Snapshot, ctx: Ctx, winnerId: string): void {

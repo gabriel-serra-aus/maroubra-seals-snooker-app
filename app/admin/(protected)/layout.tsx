@@ -14,20 +14,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className="topbar">
         <div className="inner">
           <nav>
-            <Link href="/admin" className="logo-link" aria-label="Bracket">
+            <Link href="/admin" className="logo-link" aria-label="Tonight">
               {/* Served as-is from public/: three fixed sizes, no image service needed (plan: cheap and self-contained). */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/club-logo-small.png" alt="" className="logo-sm" />
+              <span className="brand-name">Maroubra Seals Snooker</span>
             </Link>
-            <Link href="/admin"><strong>Bracket</strong></Link>
-            <Link href="/admin/setup">Setup</Link>
-            <Link href="/admin/players">Players</Link>
-            <Link href="/admin/ratings">Ratings</Link>
-            <Link href="/admin/history">History</Link>
-            <Link href="/admin/override">Override</Link>
+            <span className="nav-links">
+              <Link href="/admin"><strong>Tonight</strong></Link>
+              <Link href="/admin/setup">Setup</Link>
+              <Link href="/admin/players">Players</Link>
+              <Link href="/admin/ratings">Ratings</Link>
+              <Link href="/admin/history">History</Link>
+              <Link href="/admin/settings">Settings</Link>
+              <Link href="/admin/override">Override</Link>
+            </span>
           </nav>
-          <span className="row small">
-            <span className="muted">Signed in as <strong>{session.name}</strong></span>
+          <span className="row small who">
+            <span className="avatar" aria-hidden>{session.name.slice(0, 1).toUpperCase()}</span>
+            <span>{session.name}</span>
             <LogoutButton />
           </span>
         </div>

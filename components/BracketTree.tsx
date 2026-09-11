@@ -4,7 +4,7 @@ import type { BoxView, BracketPayload, EntryView, MatchView } from "@/lib/bracke
 import { boxLabel, feederLabel } from "@/lib/logic/derive";
 import { formatRemaining, matchClock } from "@/lib/timer";
 import { fmtRating } from "./client/format";
-import { actionKey, type MatchActions } from "./MatchCard";
+import type { MatchActions } from "./MatchCard";
 
 // Geometry of the tree, in SVG units. Round-one boxes stack down the first column; each later box sits
 // level with the middle of its two feeders, exactly as a bracket is drawn on paper. The drawing is scaled
@@ -47,10 +47,11 @@ function Line({ e, y, x, muted, winner, loser, rating, start }: { e: EntryView; 
 function BoxButton({ m, x, y, actions }: { m: MatchView; x: number; y: number; actions: MatchActions }) {
   const action = m.state === "not_started" ? "start" : m.state === "in_play" ? "complete" : null;
   if (!action) return null;
-  const pending = actions.pending === actionKey(action, m);
-  const label = action === "start" ? (pending ? "Starting…" : "▶ Start") : "■ Complete";
+  const locked = actions.locked(m);
+  const pending = actions.pending(action, m);
+  const label = action === "start" ? (pending ? "Starting…" : "▶ Start") : pending ? "Saving…" : "■ Record result";
   const fire = () => {
-    if (actions.busy) return;
+    if (locked) return;
     if (action === "start") actions.onStart(m);
     else actions.onComplete(m);
   };
@@ -59,9 +60,9 @@ function BoxButton({ m, x, y, actions }: { m: MatchView; x: number; y: number; a
   const h = 18;
   return (
     <g
-      className={`tree-btn ${action} ${actions.busy ? "disabled" : ""}`}
+      className={`tree-btn ${action} ${locked ? "disabled" : ""}`}
       role="button"
-      tabIndex={actions.busy ? -1 : 0}
+      tabIndex={locked ? -1 : 0}
       aria-label={`${action === "start" ? "Start" : "Complete"} ${m.label}`}
       onClick={(e) => {
         // The box behind opens the full card (limit, cancel start, review); the button acts at once.
@@ -113,6 +114,7 @@ function Box({ b, g, x, y, now, round, bracketSize, onSelect, actions }: { b: Bo
       <rect x={x} y={top} width={BOX_W} height={BOX_H} rx={6} />
       <rect x={x} y={top} width={5} height={BOX_H} rx={2} className="edge" />
       <text x={x + BOX_W - 6} y={top + 12} className="tree-label">
+        {m?.table_number && m.state !== "finished" ? <tspan className="tree-table">T{m.table_number} · </tspan> : null}
         {clock && <tspan className={`tree-clock ${clock.timed_out ? "timed-out" : ""}`}>{clock.timed_out ? "00:00 ⚠" : formatRemaining(clock.remaining_ms)} · </tspan>}
         {b.label}
       </text>

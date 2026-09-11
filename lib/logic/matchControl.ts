@@ -13,21 +13,24 @@ import {
   removeMatch,
 } from "./derive";
 import { advanceAll, advancementOf, unwindAdvance, type Advancement } from "./rounds";
+import { tableForStart } from "./tables";
 import type { BuybackDecision, Ctx, EntryRow, MatchRow, Snapshot } from "./types";
 
 export type LoserDecision = Extract<BuybackDecision, "bought_back" | "declined">;
 
-function getMatch(s: Snapshot, matchId: string): MatchRow {
+export function getMatch(s: Snapshot, matchId: string): MatchRow {
   const m = matchById(s, matchId);
   if (!m) throw notFound("Match not found");
   return m;
 }
 
 /** Start (rules 12): green, clock running from the frozen limit. */
-export function startMatch(s: Snapshot, ctx: Ctx, matchId: string, timeLimitMinutes?: number): MatchRow {
+export function startMatch(s: Snapshot, ctx: Ctx, matchId: string, timeLimitMinutes?: number, table?: number): MatchRow {
   const m = getMatch(s, matchId);
   if (m.state !== "not_started") throw conflict(`${matchLabel(s, m)} has already started`);
   m.time_limit_minutes = timeLimitMinutes ?? m.time_limit_minutes ?? s.competition.default_time_limit_minutes;
+  // The table (spec 5.14): asked for, noted beforehand, or the lowest free one.
+  m.table_number = tableForStart(s, m, table);
   m.started_at = ctx.now;
   m.state = "in_play";
   return m;
@@ -47,6 +50,7 @@ export function cancelStart(s: Snapshot, ctx: Ctx, matchId: string): MatchRow {
   if (m.state !== "in_play") throw conflict("Only a match in play can have its start cancelled");
   m.started_at = null;
   m.time_limit_minutes = null;
+  m.table_number = null;
   m.state = "not_started";
   ctx.log.push({ action: "cancel_start", details: { match: matchLabel(s, m), round: m.round } });
   return m;

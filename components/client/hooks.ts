@@ -7,11 +7,19 @@ import { serverOffsetMs } from "@/lib/timer";
  * Polls a JSON URL every `intervalMs`, and again whenever the page becomes visible (a locked phone coming
  * back), so the clocks and results are current without the viewer doing anything (spec 3.8, 5.12).
  * `setData` lets an action drop in the bracket its own reply carried, so nothing waits for a second fetch.
+ *
+ * `isStale(incoming, current)` guards every update, poll or reply: a payload older than the one on screen
+ * is dropped. A poll answered from before a save landed, or two saves whose replies cross in the air,
+ * can therefore never put an older bracket over a newer one (spec 7.2, `version`).
  */
-export function usePoll<T>(url: string, intervalMs: number, initial: T) {
-  const [data, setData] = useState<T>(initial);
+export function usePoll<T>(url: string, intervalMs: number, initial: T, isStale?: (incoming: T, current: T) => boolean) {
+  const [data, setState] = useState<T>(initial);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
+  const setData = useCallback(
+    (incoming: T) => setState((current) => (isStale && isStale(incoming, current) ? current : incoming)),
+    [isStale],
+  );
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
     inFlight.current = true;
@@ -31,7 +39,7 @@ export function usePoll<T>(url: string, intervalMs: number, initial: T) {
     } finally {
       inFlight.current = false;
     }
-  }, [url]);
+  }, [url, setData]);
   useEffect(() => {
     const id = setInterval(refresh, intervalMs);
     const onVisible = () => {
@@ -59,14 +67,19 @@ export function useServerClock(serverNowIso: string | undefined): number {
 }
 
 /**
- * Runs an async action. `pending` is the key of the action in flight (the button that was tapped shows a
- * spinner); `busy` disables everything else until the reply lands (spec 3.4).
+ * Runs async actions. `pending` holds the key of every action in flight (the button that was tapped shows
+ * a spinner, `isPending(key)`); `busy` is true while any is. More than one can run at once, so a screen
+ * decides what a key locks: a match action locks only its own match (spec 3.4), a night-wide one the page.
+ * The same key cannot be run twice at once, so a double tap is a single request.
  */
 export function useAction() {
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
+  const live = useRef(new Set<string>());
   const run = useCallback(async (fn: () => Promise<unknown>, key = "default") => {
-    setPending(key);
+    if (live.current.has(key)) return false;
+    live.current.add(key);
+    setPending(new Set(live.current));
     setError(null);
     try {
       await fn();
@@ -75,10 +88,12 @@ export function useAction() {
       setError(e instanceof Error ? e.message : String(e));
       return false;
     } finally {
-      setPending(null);
+      live.current.delete(key);
+      setPending(new Set(live.current));
     }
   }, []);
-  return { busy: pending !== null, pending, error, run, setError };
+  const isPending = useCallback((key: string) => pending.has(key), [pending]);
+  return { busy: pending.size > 0, pending, isPending, error, run, setError };
 }
 
 /**

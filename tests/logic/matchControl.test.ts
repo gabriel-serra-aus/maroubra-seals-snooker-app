@@ -9,7 +9,8 @@ import {
   setMatchTimeLimit,
   startMatch,
 } from "@/lib/logic/matchControl";
-import { entry, match, play, playRound, startNight } from "./helpers";
+import { freeTables, setMatchTable, setTableCount } from "@/lib/logic/tables";
+import { entry, match, play, playRound, startNight, startOn } from "./helpers";
 
 const ratings = (n: number) => Array.from({ length: n }, (_, i) => 20 + i);
 
@@ -19,11 +20,11 @@ describe("start, time limit, cancel start (rules 12, O-5, spec 5.8)", () => {
     const m = match(s, 1);
     setMatchTimeLimit(s, m.id, 30);
     const before = { a: m.player_a_id, b: m.player_b_id, start: m.start_points, to: m.start_entry_id };
-    startMatch(s, ctx, m.id);
+    startOn(s, ctx, m.id);
     expect(m.state).toBe("in_play");
     expect(m.started_at).toEqual(ctx.now);
     expect(m.time_limit_minutes).toBe(30);
-    expect(() => startMatch(s, ctx, m.id)).toThrow(/already started/);
+    expect(() => startOn(s, ctx, m.id)).toThrow(/already started/);
     expect(() => setMatchTimeLimit(s, m.id, 20)).toThrow(/before a match starts/);
     cancelStart(s, ctx, m.id);
     expect(m.state).toBe("not_started");
@@ -33,7 +34,7 @@ describe("start, time limit, cancel start (rules 12, O-5, spec 5.8)", () => {
     expect(ctx.log.map((l) => l.action)).toEqual(["cancel_start"]);
     expect(() => cancelStart(s, ctx, m.id)).toThrow(/Only a match in play/);
     // Can be started again, taking the competition default now.
-    startMatch(s, ctx, m.id);
+    startOn(s, ctx, m.id);
     expect(m.time_limit_minutes).toBe(25);
   });
 
@@ -46,7 +47,7 @@ describe("start, time limit, cancel start (rules 12, O-5, spec 5.8)", () => {
   it("complete records the winner, stops the clock, and refuses a second result", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
     const m = match(s, 1);
-    startMatch(s, ctx, m.id);
+    startOn(s, ctx, m.id);
     expect(() => completeMatch(s, ctx, m.id, "nobody", "declined")).toThrow(/must be a player/);
     const r = completeMatch(s, ctx, m.id, m.player_a_id, "declined");
     expect(m.state).toBe("finished");
@@ -62,7 +63,7 @@ describe("start, time limit, cancel start (rules 12, O-5, spec 5.8)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
     playRound(s, ctx);
     const m = match(s, 9);
-    startMatch(s, ctx, m.id);
+    startOn(s, ctx, m.id);
     expect(() => completeMatch(s, ctx, m.id, m.player_a_id, "declined")).toThrow(/No buy-back decision/);
     const r = completeMatch(s, ctx, m.id, m.player_a_id);
     expect(r.completed).toBe(true);
@@ -116,7 +117,7 @@ describe("correct result (rules 12, O-6, spec 5.7)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
     playRound(s, ctx);
     const m9 = match(s, 9);
-    startMatch(s, ctx, m9.id);
+    startOn(s, ctx, m9.id);
     const m1 = match(s, 1);
     expect(correctionBlockedReason(s, m1)).toMatch(/Result locked: R2M1 has started/);
     const other = m1.player_a_id === m1.winner_id ? m1.player_b_id : m1.player_a_id;
@@ -148,7 +149,7 @@ describe("correct result (rules 12, O-6, spec 5.7)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(15) });
     const r = play(s, ctx, 1, "a", "bought_back"); // the only free seat is beside the lone player in M8
     expect(r.loser.buybackMatch?.number).toBe(8);
-    startMatch(s, ctx, match(s, 8).id);
+    startOn(s, ctx, match(s, 8).id);
     const m1 = match(s, 1);
     expect(correctionBlockedReason(s, m1)).toMatch(/buy-back match R1M8 already started/);
     expect(() => correctMatch(s, ctx, m1.id, m1.player_b_id, "declined")).toThrow(/already started/);
@@ -184,5 +185,66 @@ describe("correct result (rules 12, O-6, spec 5.7)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
     playRound(s, ctx);
     expect(() => closeBuybacks(s, ctx)).toThrow(/already closed/);
+  });
+});
+
+describe("tables (spec 5.14)", () => {
+  it("start needs a free table chosen; complete frees it, cancel start gives it back", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(8), tables: 4 });
+    const [m1, m2, m3, m4] = [1, 2, 3, 4].map((n) => match(s, n));
+    expect(freeTables(s)).toEqual([1, 2, 3, 4]);
+    // Nothing is picked for the organiser: no table, no start.
+    expect(() => startMatch(s, ctx, m1.id)).toThrow(/Choose a free table for R1M1: 1, 2, 3, 4/);
+    expect(m1.state).toBe("not_started");
+    startMatch(s, ctx, m1.id, undefined, 2);
+    startMatch(s, ctx, m2.id, undefined, 4);
+    expect([m1.table_number, m2.table_number]).toEqual([2, 4]);
+    expect(freeTables(s)).toEqual([1, 3]);
+    cancelStart(s, ctx, m1.id);
+    expect(m1.table_number).toBeNull();
+    expect(freeTables(s)).toEqual([1, 2, 3]);
+    completeMatch(s, ctx, m2.id, m2.player_a_id, "declined");
+    // A finished match keeps the table it was played on, but no longer occupies it.
+    expect(m2.table_number).toBe(4);
+    expect(freeTables(s)).toEqual([1, 2, 3, 4]);
+    startMatch(s, ctx, m3.id, undefined, 4);
+    startMatch(s, ctx, m4.id, undefined, 1);
+    expect(freeTables(s)).toEqual([2, 3]);
+  });
+
+  it("a busy or out-of-range table is refused; a table noted before start counts as the choice while free", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(6), tables: 4 });
+    const [m1, m2, m3] = [1, 2, 3].map((n) => match(s, n));
+    startMatch(s, ctx, m1.id, undefined, 3);
+    expect(() => startMatch(s, ctx, m2.id, undefined, 3)).toThrow(/Table 3 is in use by R1M1/);
+    expect(() => startMatch(s, ctx, m2.id, undefined, 5)).toThrow(/1 to 4/);
+    expect(m2.state).toBe("not_started");
+    setMatchTable(s, m2, 4);
+    startMatch(s, ctx, m2.id);
+    expect(m2.table_number).toBe(4);
+    setMatchTable(s, m3, 4); // noted, but taken by the time it starts: choose again
+    expect(() => startMatch(s, ctx, m3.id)).toThrow(/Choose a free table for R1M3: 1, 2/);
+    startMatch(s, ctx, m3.id, undefined, 1);
+    expect(m3.table_number).toBe(1);
+  });
+
+  it("with every table busy nothing starts; moving and the table count are guarded", () => {
+    const { s, ctx } = startNight({ bracket: 16, ratings: ratings(6), tables: 2 });
+    const [m1, m2, m3] = [1, 2, 3].map((n) => match(s, n));
+    startMatch(s, ctx, m1.id, undefined, 1);
+    startMatch(s, ctx, m2.id, undefined, 2);
+    expect(() => startMatch(s, ctx, m3.id)).toThrow(/Every table is busy/);
+    expect(() => startMatch(s, ctx, m3.id, undefined, 1)).toThrow(/Table 1 is in use by R1M1/);
+    expect(m3.state).toBe("not_started");
+    expect(() => setMatchTable(s, m2, 1)).toThrow(/Table 1 is in use by R1M1/);
+    expect(() => setTableCount(s, 1)).toThrow(/R1M2 is in play on table 2/);
+    setTableCount(s, 3);
+    startMatch(s, ctx, m3.id, undefined, 3);
+    setMatchTable(s, m3, null);
+    expect(m3.table_number).toBeNull();
+    completeMatch(s, ctx, m1.id, m1.player_a_id, "declined");
+    expect(() => setMatchTable(s, m1, 2)).toThrow(/finished match keeps/);
+    setMatchTable(s, m3, 1);
+    expect(m3.table_number).toBe(1);
   });
 });

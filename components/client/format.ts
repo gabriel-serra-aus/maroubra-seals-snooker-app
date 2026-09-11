@@ -16,7 +16,11 @@ export const fmtRating = (r: number) => (r < 0 ? `−${Math.abs(r)}` : String(r)
 
 export const fmtDelta = (d: number) => (d > 0 ? `+${d}` : d < 0 ? `−${Math.abs(d)}` : "0");
 
-export const STATE_LABEL = { not_started: "NOT STARTED", in_play: "IN PLAY", finished: "FINISHED" } as const;
+/** What a state chip says (spec 4.1): a match with two players is ready, a running clock is live. */
+export const STATE_LABEL = { not_started: "READY", in_play: "LIVE", finished: "FINISHED" } as const;
+
+/** "Round 2", or "Final" for the last round (spec 3.4). */
+export const roundName = (round: number, roundsTotal: number) => (round === roundsTotal ? "Final" : `Round ${round}`);
 export const DECISION_LABEL = { bought_back: "bought back", declined: "declined", no_slots: "out — no slots left" } as const;
 
 /** What a Complete / Correct / Close reply says about where the winner went (spec 3.5). */

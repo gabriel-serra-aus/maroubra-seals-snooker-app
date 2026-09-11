@@ -94,6 +94,7 @@ export function endCompetitionEarly(s: Snapshot, ctx: Ctx): { unplayed: number; 
     if (m.state !== "in_play") continue;
     m.started_at = null;
     m.time_limit_minutes = null;
+    m.table_number = null;
     m.state = "not_started";
     cancelled.push(matchLabel(s, m));
   }

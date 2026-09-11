@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { addLateArrival, closeBuybacks } from "@/lib/logic/buybacks";
 import { abandonCompetition, endCompetitionEarly } from "@/lib/logic/competition";
 import { boxOf, currentRound, matchNumberFor, positionOf, roundsFor, siblingHalf, slotRangeOf } from "@/lib/logic/derive";
-import { correctMatch, startMatch } from "@/lib/logic/matchControl";
-import { hasMatch, makeCtx, match, play, playRound, playToEnd, setupNight, slotEntry, startNight } from "./helpers";
+import { correctMatch } from "@/lib/logic/matchControl";
+import { hasMatch, makeCtx, match, play, playRound, playToEnd, setupNight, slotEntry, startNight, startOn } from "./helpers";
 
 const ratings = (n: number) => Array.from({ length: n }, (_, i) => 20 + i);
 
@@ -185,8 +185,8 @@ describe("end night here (spec 5.11)", () => {
 
   it("throws away the clock of a match still in play, like a cancel start (O-5)", () => {
     const { s, ctx } = startNight({ bracket: 16, ratings: ratings(8) });
-    startMatch(s, ctx, match(s, 1).id);
-    startMatch(s, ctx, match(s, 2).id);
+    startOn(s, ctx, match(s, 1).id);
+    startOn(s, ctx, match(s, 2).id);
     const r = endCompetitionEarly(s, ctx);
     expect(r.cancelled).toBe(2);
     expect(match(s, 1).state).toBe("not_started");

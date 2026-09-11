@@ -8,12 +8,13 @@ import { Btn } from "./Btn";
 import { patch } from "./client/api";
 import { useAction } from "./client/hooks";
 
-/** Settings (spec 3.10): the match time limit and the rating-adjustment scale, off the setup page. */
+/** Settings (spec 3.10): the match time limit, the club's tables and the rating-adjustment scale, off the setup page. */
 export function SettingsForm({ competition }: { competition: BracketPayload | null }) {
   const router = useRouter();
   const c = competition?.competition ?? null;
   const [form, setForm] = useState({
     default_time_limit_minutes: c?.default_time_limit_minutes ?? 25,
+    table_count: c?.table_count ?? 4,
     rating_top_count: c?.rating_top_count ?? 3,
     rating_top_delta: c?.rating_top_delta ?? -1,
     rating_bottom_count: c?.rating_bottom_count ?? 3,
@@ -26,7 +27,7 @@ export function SettingsForm({ competition }: { competition: BracketPayload | nu
   const save = () =>
     run(async () => {
       if (!c) return;
-      const body: Record<string, number> = { default_time_limit_minutes: form.default_time_limit_minutes };
+      const body: Record<string, number> = { default_time_limit_minutes: form.default_time_limit_minutes, table_count: form.table_count };
       if (!locked) {
         body.rating_top_count = form.rating_top_count;
         body.rating_top_delta = form.rating_top_delta;
@@ -56,6 +57,10 @@ export function SettingsForm({ competition }: { competition: BracketPayload | nu
           <label className="field">
             <span>Match time limit (minutes)</span>
             <input className="inline" type="number" min={1} max={180} value={form.default_time_limit_minutes} onChange={num("default_time_limit_minutes")} />
+          </label>
+          <label className="field">
+            <span>Snooker tables (numbered 1 to this; Start puts a match on the lowest free one)</span>
+            <input className="inline" type="number" min={1} max={16} value={form.table_count} onChange={num("table_count")} />
           </label>
           <div className="field">
             <span className="muted small">Rating adjustment (applied on the review after the night)</span>

@@ -29,6 +29,7 @@ export const POST = handle(async (request) => {
       name: optionalString(body, "name", 80) || defaultCompetitionName(),
       bracket_size: size,
       default_time_limit_minutes: optionalInt(body, "default_time_limit_minutes", 1, 180) ?? 25,
+      table_count: optionalInt(body, "table_count", 1, 16) ?? prev.table_count,
       rating: {
         rating_top_count: optionalInt(body, "rating_top_count", 0, 64) ?? prev.rating_top_count,
         rating_top_delta: optionalInt(body, "rating_top_delta", -50, 50) ?? prev.rating_top_delta,

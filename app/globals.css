@@ -1,19 +1,30 @@
+/*
+  Palette (UX review, Sep 2026): the club's navy for identity and primary taps, felt green only for live
+  play, amber for anything waiting, neutral for what is finished, and red kept for errors and taps that
+  cannot be undone. Nothing else is coloured.
+*/
 :root {
   --bg: #f4f3ef;
   --fg: #1a1a1a;
   --muted: #666;
   --line: #d9d6cf;
   --card: #fff;
-  --accent: #1f4e79;
-  --accent-bg: #e8f0f8;
-  --green: #1e8e3e;
-  --green-bg: #e6f4ea;
+  --navy: #1f3a5f;
+  --navy-deep: #17304f;
+  --accent: #1f3a5f;
+  --accent-bg: #e8eef6;
+  --green: #1a7f45;
+  --green-bg: #e3f3e8;
   --red: #c5221f;
   --red-bg: #fce8e6;
   --amber: #b26a00;
   --amber-bg: #fff3e0;
   --violet: #6a1b9a;
   --violet-bg: #f3e5f5;
+  --done-bg: #f7f6f3;
+  --done-line: #e4e1da;
+  --radius: 12px;
+  --bottom-tabs: 0px;
 }
 
 * {
@@ -31,6 +42,17 @@ body {
   font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/* A phone is read at arm's length in a bar: bigger type, and room under the last card for the floating
+   "Powered by Netlify" badge the host injects. */
+@media (max-width: 640px) {
+  body {
+    font-size: 17px;
+  }
+  :root {
+    --bottom-tabs: 64px;
+  }
+}
+
 a {
   color: var(--accent);
 }
@@ -39,7 +61,7 @@ main {
   width: 100%;
   max-width: 1800px;
   margin: 0 auto;
-  padding: 12px clamp(12px, 2vw, 32px) 64px;
+  padding: 12px clamp(12px, 2vw, 32px) calc(96px + var(--bottom-tabs));
 }
 
 main.narrow {
@@ -51,8 +73,9 @@ main.medium {
 }
 
 h1 {
-  font-size: 1.3rem;
-  margin: 8px 0;
+  font-size: 1.5rem;
+  margin: 8px 0 2px;
+  letter-spacing: -0.01em;
 }
 
 h2 {
@@ -76,8 +99,17 @@ p {
   font-size: 0.9rem;
 }
 
+.dim {
+  opacity: 0.75;
+}
+
 .small {
   font-size: 0.85rem;
+}
+
+.mid {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
 .row {
@@ -98,21 +130,23 @@ p {
 .card {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 10px 12px;
   margin: 8px 0;
 }
 
+/* Top bar: navy, the club badge at the left, the pages along it (spec 3.1). */
 .topbar {
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
-  padding: 8px 12px;
+  background: var(--navy);
+  color: #fff;
+  padding: 6px 12px;
   position: sticky;
   top: 0;
   z-index: 5;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
 }
 
-  .topbar .inner {
+.topbar .inner {
   max-width: 1800px;
   margin: 0 auto;
   padding: 0 clamp(0px, 1vw, 20px);
@@ -121,25 +155,341 @@ p {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-height: 44px;
 }
 
-.topbar nav a {
-  margin-right: 10px;
+.topbar a {
+  color: #fff;
+  text-decoration: none;
+}
+
+.topbar nav {
+  display: flex;
+  align-items: center;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+}
+
+.topbar nav .nav-links {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+
+/* On a phone the pages sit on one row that scrolls sideways, so the bar stays two lines tall at most. */
+@media (max-width: 640px) {
+  .topbar nav {
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topbar nav::-webkit-scrollbar {
+    display: none;
+  }
+  .topbar nav .nav-links {
+    flex-wrap: nowrap;
+  }
+  .topbar nav .nav-links a {
+    white-space: nowrap;
+  }
+  /* The admin bar hides the club name to make room for the pages; the public bar has no pages, so it keeps it. */
+  .topbar:not(.public) .brand-name {
+    display: none;
+  }
+  .topbar .who {
+    margin-left: auto;
+  }
+}
+
+.topbar nav .nav-links a {
   font-size: 0.9rem;
+  padding: 6px 8px;
+  border-radius: 6px;
+  opacity: 0.85;
+}
+
+.topbar nav .nav-links a:hover,
+.topbar nav .nav-links a:has(strong) {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.topbar .who {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.topbar .who .btn {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #fff;
+  background: transparent;
+}
+
+.avatar {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.brand-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+
+.topbar nav .logo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 6px;
+}
+
+/* Title block: the name, one line of facts, one action at the right. */
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.page-head .meta {
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 4px 0 10px;
+}
+
+/* State chips (spec 4.1): live is felt green, ready and waiting amber, finished neutral. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--done-bg);
+  color: var(--muted);
+  border: 1px solid var(--done-line);
+  white-space: nowrap;
+}
+
+.chip .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgba(26, 127, 69, 0.2);
+}
+
+.chip.in_play {
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+}
+
+.chip.not_started,
+.chip.awaiting,
+.chip.open {
+  background: var(--amber-bg);
+  color: var(--amber);
+  border-color: transparent;
+}
+
+.chip.finished {
+  background: var(--done-bg);
+  color: var(--muted);
+}
+
+/* The table a match is on (spec 5.14): navy, so it reads apart from the state. */
+.chip.table {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.chip.table.none {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.chip.tappable {
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 28px;
+}
+
+.chip.tappable:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The tables along the top (spec 5.14): green when free, the match and its clock when busy. */
+.table-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+
+.table-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  min-height: 64px;
+  text-align: center;
+  font: inherit;
+  color: var(--fg);
+}
+
+.table-tile.free {
+  border-color: var(--green);
+  background: var(--green-bg);
+}
+
+.table-tile.busy {
+  border-color: var(--line);
+  background: var(--done-bg);
+}
+
+.table-tile.over {
+  border-color: var(--amber);
+}
+
+.table-tile .table-n {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.table-tile.free .table-n {
+  color: var(--green);
+}
+
+.table-tile .table-who {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.table-tile .table-who.free {
+  color: var(--green);
+}
+
+.table-tile .table-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.table-tile .table-clock {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+
+.table-tile.over .table-clock {
+  color: var(--amber);
+}
+
+/* The picker (spec 5.14): one big button per table, free ones tappable. */
+.table-pick {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.table-tile.pickable {
+  min-height: 80px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.table-tile.pickable.free:hover {
+  box-shadow: 0 0 0 3px rgba(26, 127, 69, 0.2);
+}
+
+.table-tile.pickable:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.table-big {
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-top: 6px;
+}
+
+.chips .chip {
+  font-size: 0.8rem;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 6px 12px;
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--fg);
+}
+
+.chips .chip.in_play {
+  color: var(--green);
+  background: var(--green-bg);
+  border-color: transparent;
+}
+
+.chips .chip.not_started,
+.chips .chip.open {
+  color: var(--amber);
+  background: var(--amber-bg);
 }
 
 /* Buttons */
 .btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font: inherit;
   font-size: 0.95rem;
-  padding: 8px 12px;
+  font-weight: 600;
+  padding: 8px 14px;
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--card);
   color: var(--accent);
   cursor: pointer;
-  min-height: 40px;
+  min-height: 44px;
   text-decoration: none;
 }
 
@@ -168,11 +518,12 @@ p {
   text-align: center;
   font-size: 1.05rem;
   padding: 12px;
+  min-height: 48px;
 }
 
 .btn.sm {
-  padding: 4px 8px;
-  min-height: 32px;
+  padding: 6px 10px;
+  min-height: 38px;
   font-size: 0.85rem;
 }
 
@@ -192,8 +543,8 @@ label.check {
 }
 
 label.check input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   margin: 0;
   flex: none;
 }
@@ -212,9 +563,9 @@ input[type="search"],
 select {
   font: inherit;
   width: 100%;
-  padding: 10px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
   min-height: 44px;
 }
@@ -224,7 +575,7 @@ input.inline {
   display: inline-block;
   text-align: center;
   padding: 6px;
-  min-height: 36px;
+  min-height: 38px;
 }
 
 .radio {
@@ -236,11 +587,68 @@ input.inline {
   margin-right: 8px;
 }
 
+/* Big tappable choices in the result dialog (spec 3.5): nothing is chosen until the organiser taps. */
+.choices {
+  display: grid;
+  gap: 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 56px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.choice input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.choice.on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.choice.off {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.choice .choice-label .muted {
+  font-weight: 400;
+}
+
+.summary {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.summary.empty {
+  background: var(--done-bg);
+  color: var(--muted);
+  font-weight: 400;
+}
+
 .error {
   color: var(--red);
   background: var(--red-bg);
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: 10px;
   margin: 8px 0;
 }
 
@@ -248,7 +656,7 @@ input.inline {
   background: var(--amber-bg);
   color: var(--amber);
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: 10px;
   margin: 8px 0;
 }
 
@@ -256,65 +664,93 @@ input.inline {
   background: var(--accent-bg);
   color: var(--accent);
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: 10px;
   margin: 8px 0;
 }
 
-/* Matches (rules 12 colours) */
+/* Match cards (spec 4.1 colours): green while live, amber while waiting, neutral once finished. */
 .match {
   background: var(--card);
   border: 1px solid var(--line);
-  border-left: 6px solid var(--line);
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: var(--radius);
+  padding: 10px 12px;
   margin: 8px 0;
 }
 
 .match.in_play {
-  border-left-color: var(--green);
-  background: var(--green-bg);
+  border: 2px solid var(--green);
+  box-shadow: 0 2px 10px rgba(26, 127, 69, 0.12);
+}
+
+.match.in_play.timed-out {
+  border-color: var(--amber);
 }
 
 .match.finished {
-  border-left-color: var(--red);
-  background: var(--red-bg);
+  background: var(--done-bg);
+  border-color: var(--done-line);
 }
 
 .match .head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   font-size: 0.85rem;
   font-weight: 600;
+  margin-bottom: 4px;
 }
 
-.match .state {
-  letter-spacing: 0.03em;
+.match .head-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.match .state.in_play {
-  color: var(--green);
+.match .head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.match .state.finished {
-  color: var(--red);
-}
-
-.match .timed-out {
-  color: var(--amber);
+/* The countdown, in felt green, large enough to read across a table (spec 5.12). */
+.match .clock {
+  font-size: 1.25rem;
   font-weight: 700;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  background: var(--green-bg);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+.match .clock.over {
+  color: var(--amber);
+  background: var(--amber-bg);
 }
 
 .match .player {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  padding: 2px 0;
+  padding: 3px 0;
+  font-size: 1.05rem;
 }
 
 .match .player .name {
   font-weight: 500;
+}
+
+.match .player .facts {
+  display: inline-flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.match .player.winner .name {
+  font-weight: 700;
 }
 
 .match .player.winner .name::before {
@@ -329,12 +765,12 @@ input.inline {
 .match .actions {
   display: flex;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 8px;
   flex-wrap: wrap;
   align-items: center;
 }
 
-/* Start and Complete take the whole card; anything beside them wraps underneath. */
+/* Start and Record result take the whole card; anything beside them wraps underneath. */
 .match .actions .btn.wide {
   flex: 0 0 100%;
 }
@@ -347,16 +783,18 @@ input.inline {
 }
 
 .awaiting {
-  border-left-color: var(--amber);
+  border-color: var(--amber);
+  border-style: dashed;
 }
 
 .tag {
-  font-size: 0.75rem;
-  padding: 1px 6px;
+  font-size: 0.72rem;
+  padding: 1px 7px;
   border-radius: 10px;
   background: #eee;
   color: #444;
   white-space: nowrap;
+  vertical-align: middle;
 }
 
 .tag.buyback {
@@ -369,22 +807,17 @@ input.inline {
   color: var(--violet);
 }
 
-.tag.draw {
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-
 details.round summary {
   cursor: pointer;
   font-weight: 600;
-  padding: 6px 0;
+  padding: 10px 0;
 }
 
 /* Dialog: centred on the screen, whatever the screen (spec 3.5) */
 .sheet-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(23, 48, 79, 0.45);
   z-index: 20;
   display: flex;
   align-items: center;
@@ -393,12 +826,12 @@ details.round summary {
 }
 
 .sheet {
-  background: var(--card);
+  background: var(--bg);
   width: 100%;
   max-width: 520px;
   max-height: 90vh;
   overflow: auto;
-  border-radius: 14px;
+  border-radius: 16px;
   padding: 14px 16px 18px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
 }
@@ -409,11 +842,18 @@ details.round summary {
 
 .sheet h2 {
   margin-top: 0;
+  border: 0;
+  font-size: 1.4rem;
+}
+
+.sheet.result h3 {
+  margin-top: 16px;
 }
 
 /* Confirm / prompt (components/Dialog.tsx): the app's own, never the browser's. */
 .sheet.dialog {
   max-width: 460px;
+  background: var(--card);
 }
 
 .dialog-body {
@@ -442,7 +882,8 @@ details.round summary {
   flex: 1 1 0;
   min-width: 120px;
   text-align: center;
-  padding: 10px 12px;
+  padding: 12px;
+  min-height: 48px;
 }
 
 .center {
@@ -457,7 +898,7 @@ table {
 td,
 th {
   text-align: left;
-  padding: 6px 4px;
+  padding: 8px 4px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
 }
@@ -474,6 +915,10 @@ th.num {
   font-variant-numeric: tabular-nums;
 }
 
+table.players td {
+  padding: 10px 6px;
+}
+
 ul.plain {
   list-style: none;
   padding: 0;
@@ -486,6 +931,20 @@ ul.plain li {
   justify-content: space-between;
   gap: 8px;
   align-items: center;
+}
+
+/* Rows of names: waiting players, results, finder hits. */
+ul.rows li {
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 6px 0;
+  flex-wrap: wrap;
+}
+
+.result-row .tag {
+  margin-left: 6px;
 }
 
 .footer-links {
@@ -532,15 +991,17 @@ ul.plain li {
   }
 }
 
-/* The "limit: 25 min" note on a not-started card is also where the limit is changed (rarely) */
+/* The "25 min" note on a not-started card is also where the limit is changed (rarely) */
 .linkish {
   font: inherit;
+  font-size: 0.85rem;
   color: var(--muted);
   background: none;
   border: 0;
-  padding: 0;
+  padding: 6px 0;
   cursor: pointer;
   text-decoration: underline dotted;
+  min-height: 32px;
 }
 
 .linkish:disabled {
@@ -560,12 +1021,27 @@ ul.plain li {
   margin: 0;
 }
 
-/* List | Tree toggle */
+/* List | Tree toggle and the finder beside it */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.toolbar .finder {
+  flex: 1 1 220px;
+  max-width: 420px;
+}
+
 .toggle {
   display: inline-flex;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   overflow: hidden;
+  background: var(--card);
+  flex: none;
 }
 
 .toggle button,
@@ -574,19 +1050,220 @@ ul.plain li {
   display: inline-flex;
   align-items: center;
   font: inherit;
-  font-size: 0.85rem;
-  padding: 6px 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 6px 16px;
   border: 0;
   background: var(--card);
   color: var(--accent);
   cursor: pointer;
-  min-height: 32px;
+  min-height: 44px;
 }
 
 .toggle button.on,
 .toggle a.on {
   background: var(--accent);
   color: #fff;
+}
+
+/* Find my match (spec 3.8) */
+.finder {
+  margin: 8px 0;
+}
+
+.finder-hits {
+  margin-top: 6px;
+}
+
+.finder-hits li {
+  padding: 8px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 4px 0;
+  flex-wrap: wrap;
+}
+
+/* Tonight (spec 3.8): the live cards */
+.live-card,
+.next-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.live-card {
+  border: 2px solid var(--green);
+  box-shadow: 0 2px 12px rgba(26, 127, 69, 0.14);
+}
+
+.live-card.timed-out {
+  border-color: var(--amber);
+}
+
+.big-clock {
+  font-size: clamp(3rem, 16vw, 4.5rem);
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: center;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  margin: 8px 0 6px;
+}
+
+.big-clock.over {
+  color: var(--amber);
+}
+
+.vs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 1.05rem;
+}
+
+.vs.big {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.vs .vs-name {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.vs .vs-name:last-child {
+  text-align: right;
+}
+
+.vs .vs-name.loser {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.vs .tick {
+  color: var(--green);
+}
+
+.vs-mark {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--done-bg);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.next-card .vs {
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+  padding-top: 10px;
+}
+
+.empty-night {
+  padding: 16px;
+}
+
+/* Section tabs (public page): along the top on a desktop, along the bottom on a phone. */
+.tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.tabs button {
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.tabs button.on {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.tabs button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tabs .tab-icon {
+  display: none;
+}
+
+.tabs .badge {
+  background: var(--green);
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+.bottom-tabs {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .topbar-tabs {
+    display: none;
+  }
+  .bottom-tabs {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    background: var(--card);
+    border-top: 1px solid var(--line);
+    padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
+  }
+  .bottom-tabs .tabs {
+    justify-content: space-around;
+  }
+  .bottom-tabs .tabs button {
+    flex-direction: column;
+    gap: 2px;
+    color: var(--muted);
+    font-size: 0.75rem;
+    min-width: 72px;
+    min-height: 52px;
+    padding: 4px 8px;
+  }
+  .bottom-tabs .tabs button.on {
+    color: var(--green);
+    background: transparent;
+    box-shadow: inset 0 -3px 0 var(--green);
+  }
+  .bottom-tabs .tabs .tab-icon {
+    display: block;
+  }
+  .bottom-tabs .tabs .badge {
+    position: absolute;
+    transform: translate(28px, -6px);
+  }
+  .bottom-tabs .tabs button {
+    position: relative;
+  }
 }
 
 /* Tree view (spec 3.4, 3.8) */
@@ -615,6 +1292,11 @@ svg.tree {
 
 .tree-clock {
   fill: var(--green);
+  font-weight: 700;
+}
+
+.tree-table {
+  fill: var(--accent);
   font-weight: 700;
 }
 
@@ -648,6 +1330,7 @@ svg.tree {
 
 .tree-box.in_play rect {
   fill: var(--green-bg);
+  stroke: var(--green);
 }
 
 .tree-box.in_play rect.edge {
@@ -655,11 +1338,12 @@ svg.tree {
 }
 
 .tree-box.finished rect {
-  fill: var(--red-bg);
+  fill: var(--done-bg);
+  stroke: var(--done-line);
 }
 
 .tree-box.finished rect.edge {
-  fill: var(--red);
+  fill: var(--done-line);
 }
 
 .tree-box.awaiting rect.edge {
@@ -726,9 +1410,8 @@ svg.tree {
   font-weight: 700;
 }
 
-/* Start / Complete inside a box of the admin tree (spec 3.4). The fill is scoped under .tree-box so it
-   outranks the box's own state colour (.tree-box.in_play rect), which used to wash the Complete button
-   out to the pale green of the box it sits on. */
+/* Start / Record result inside a box of the admin tree (spec 3.4). The fill is scoped under .tree-box so
+   it outranks the box's own state colour (.tree-box.in_play rect). */
 .tree-btn {
   cursor: pointer;
 }
@@ -784,6 +1467,11 @@ td.down {
   margin: 8px 0 4px;
 }
 
+.topbar .brand {
+  margin: 0;
+  gap: 8px;
+}
+
 .brand.center {
   flex-direction: column;
   gap: 4px;
@@ -809,17 +1497,8 @@ td.down {
   width: 32px;
   height: 32px;
   vertical-align: middle;
-}
-
-.topbar nav .logo-link {
-  margin-right: 6px;
-  display: inline-block;
-  vertical-align: middle;
-}
-
-.topbar nav {
-  display: flex;
-  align-items: center;
+  border-radius: 50%;
+  background: #fff;
 }
 
 /* Setup: club players on the left, tonight's list on the right (spec 3.3) */
@@ -847,7 +1526,7 @@ td.down {
   max-height: 60vh;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .pick-list li {
@@ -862,9 +1541,9 @@ td.down {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 10px;
+  padding: 10px;
   cursor: pointer;
-  min-height: 42px;
+  min-height: 44px;
 }
 
 .pick-list li.on label {

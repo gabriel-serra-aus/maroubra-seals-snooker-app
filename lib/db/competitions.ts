@@ -18,19 +18,23 @@ export const DEFAULT_RATING_SETTINGS: RatingSettings = {
   rating_bottom_delta: 2,
 };
 
-/** The four O-1 numbers carry over from the previous competition (spec 3.3). */
-export async function previousRatingSettings(q: Queryable): Promise<RatingSettings> {
-  const rows = await q.query<RatingSettings>(
-    "select rating_top_count, rating_top_delta, rating_bottom_count, rating_bottom_delta from competitions order by created_at desc limit 1",
+/** The club's tables (spec 5.14): four unless a night says otherwise. */
+export const DEFAULT_TABLE_COUNT = 4;
+
+/** The four O-1 numbers and the table count carry over from the previous competition (spec 3.3). */
+export async function previousRatingSettings(q: Queryable): Promise<RatingSettings & { table_count: number }> {
+  const rows = await q.query<RatingSettings & { table_count: number }>(
+    "select rating_top_count, rating_top_delta, rating_bottom_count, rating_bottom_delta, table_count from competitions order by created_at desc limit 1",
     [],
   );
-  return rows[0] ?? DEFAULT_RATING_SETTINGS;
+  return rows[0] ?? { ...DEFAULT_RATING_SETTINGS, table_count: DEFAULT_TABLE_COUNT };
 }
 
 export interface NewCompetition {
   name: string;
   bracket_size: BracketSize;
   default_time_limit_minutes: number;
+  table_count: number;
   rating: RatingSettings;
 }
 
@@ -38,11 +42,11 @@ export async function createCompetition(q: Queryable, c: NewCompetition): Promis
   const live = await q.query("select 1 from competitions where status in ('setup', 'in_progress')", []);
   if (live.length) throw conflict("A competition is already set up or in progress — complete or abandon it first");
   const [row] = await q.query<CompetitionRow>(
-    `insert into competitions (name, bracket_size, default_time_limit_minutes,
+    `insert into competitions (name, bracket_size, default_time_limit_minutes, table_count,
        rating_top_count, rating_top_delta, rating_bottom_count, rating_bottom_delta)
-     values ($1, $2, $3, $4, $5, $6, $7) returning *`,
+     values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
     [
-      c.name, c.bracket_size, c.default_time_limit_minutes,
+      c.name, c.bracket_size, c.default_time_limit_minutes, c.table_count,
       c.rating.rating_top_count, c.rating.rating_top_delta, c.rating.rating_bottom_count, c.rating.rating_bottom_delta,
     ],
   );

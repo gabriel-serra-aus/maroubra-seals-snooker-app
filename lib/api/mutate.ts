@@ -61,6 +61,10 @@ export async function mutateCompetition<T>(
     if (!opts.dryRun) {
       await applySnapshotDiff(tx, before, after);
       await insertAdminActions(tx, competition.id, session.name, ctx.log);
+      // The night's version (spec 7.2): taken under the row lock, so a later write always carries a
+      // later stamp, and a screen can tell a fresh bracket from one read before this commit.
+      after.competition.updated_at = ctx.now;
+      await tx.query("update competitions set updated_at = $2 where id = $1", [competition.id, ctx.now]);
     }
     return { result, before, after, bracket: buildBracketPayload(after, ctx.now), changes, log: ctx.log };
   });

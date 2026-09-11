@@ -2,6 +2,7 @@ import { closeBuybacks } from "@/lib/logic/buybacks";
 import { addDrawEntry, startCompetition } from "@/lib/logic/competition";
 import { currentRound, matchLabel } from "@/lib/logic/derive";
 import { completeMatch, startMatch, type LoserDecision } from "@/lib/logic/matchControl";
+import { freeTables } from "@/lib/logic/tables";
 import { seededRng } from "@/lib/logic/random";
 import type { BracketSize, Ctx, EntryRow, MatchRow, PlayerRow, Snapshot } from "@/lib/logic/types";
 
@@ -19,6 +20,7 @@ export interface NightOpts {
   topDelta?: number;
   bottomCount?: number;
   bottomDelta?: number;
+  tables?: number;
 }
 
 /** A competition in `setup` with players P1..Pn (ratings as given) ticked in. */
@@ -31,6 +33,7 @@ export function setupNight(opts: NightOpts, ctx = makeCtx()): { s: Snapshot; ctx
       status: "setup",
       bracket_size: opts.bracket,
       default_time_limit_minutes: 25,
+      table_count: opts.tables ?? 4,
       rating_top_count: opts.topCount ?? 3,
       rating_top_delta: opts.topDelta ?? -1,
       rating_bottom_count: opts.bottomCount ?? 3,
@@ -41,6 +44,7 @@ export function setupNight(opts: NightOpts, ctx = makeCtx()): { s: Snapshot; ctx
       abandoned_at: null,
       winner_entry_id: null,
       created_at: NOW,
+      updated_at: NOW,
     },
     players,
     entries: [],
@@ -85,10 +89,15 @@ export const nameOf = (s: Snapshot, entryId: string) => {
 
 export const entry = (s: Snapshot, id: string): EntryRow => s.entries.find((e) => e.id === id)!;
 
+/** Start a match on the lowest free table, the way the organiser taps it (spec 5.14). */
+export function startOn(s: Snapshot, ctx: Ctx, matchId: string): MatchRow {
+  return startMatch(s, ctx, matchId, undefined, freeTables(s)[0]);
+}
+
 /** Start then complete a match. `winner` = "a" | "b" | entry id. */
 export function play(s: Snapshot, ctx: Ctx, number: number, winner: "a" | "b" | string, decision?: LoserDecision) {
   const m = match(s, number);
-  if (m.state === "not_started") startMatch(s, ctx, m.id);
+  if (m.state === "not_started") startOn(s, ctx, m.id);
   const winnerId = winner === "a" ? m.player_a_id : winner === "b" ? m.player_b_id : winner;
   return completeMatch(s, ctx, m.id, winnerId, decision);
 }

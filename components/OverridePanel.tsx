@@ -23,9 +23,9 @@ interface OverrideReply {
 type ClubPlayer = { id: string; name: string; rating: number; active: boolean };
 
 /** An override button: shows a spinner while its own action (keyed by its label) is in flight. */
-function ActBtn({ label, pending, busy, className, disabled, onClick, children }: { label: string; pending: string | null; busy: boolean; className?: string; disabled?: boolean; onClick: () => void; children?: React.ReactNode }) {
+function ActBtn({ label, isPending, busy, className, disabled, onClick, children }: { label: string; isPending: (key: string) => boolean; busy: boolean; className?: string; disabled?: boolean; onClick: () => void; children?: React.ReactNode }) {
   return (
-    <Btn className={className} disabled={busy || disabled} pending={pending === label} onClick={onClick} title={label}>
+    <Btn className={className} disabled={busy || disabled} pending={isPending(label)} onClick={onClick} title={label}>
       {children ?? label}
     </Btn>
   );
@@ -48,7 +48,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
   const { data: b, refresh } = usePoll<BracketPayload>("/api/admin/bracket", 5_000, initial);
   const [actions, setActions] = useState(initialActions);
   const [notice, setNotice] = useState<string | null>(null);
-  const { busy, pending, error, run, setError } = useAction();
+  const { busy, pending, isPending, error, run, setError } = useAction();
   // Every override is confirmed in the app's own card, never a browser dialog (spec 3.5, 7.6).
   const { ask, dialog: confirmCard } = useDialog();
   const [players, setPlayers] = useState<ClubPlayer[] | null>(null);
@@ -120,7 +120,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
             </select>
             {loadingPlayers && <Spinner />}
           </span>
-          <ActBtn label="Add a player to the night" pending={pending} busy={busy} className="sm" disabled={!addId} onClick={() => override("Add a player to the night", "POST", `/api/admin/competitions/${compId}/override/entries`, { player_id: addId }).then(() => setAddId(""))}>Add</ActBtn>
+          <ActBtn label="Add a player to the night" isPending={isPending} busy={busy} className="sm" disabled={!addId} onClick={() => override("Add a player to the night", "POST", `/api/admin/competitions/${compId}/override/entries`, { player_id: addId }).then(() => setAddId(""))}>Add</ActBtn>
         </div>
         <table>
           <tbody>
@@ -130,7 +130,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
                 <td className="muted small">{positionLabel(e, b)}</td>
                 <td className="num">
                   {e.position.status !== "out" && (
-                    <ActBtn label={`Remove ${e.name} from the night`} pending={pending} busy={busy} className="sm danger" onClick={() => override(`Remove ${e.name} from the night`, "DELETE", `/api/admin/competitions/${compId}/override/entries/${e.entry_id}`)}>Remove</ActBtn>
+                    <ActBtn label={`Remove ${e.name} from the night`} isPending={isPending} busy={busy} className="sm danger" onClick={() => override(`Remove ${e.name} from the night`, "DELETE", `/api/admin/competitions/${compId}/override/entries/${e.entry_id}`)}>Remove</ActBtn>
                   )}
                 </td>
               </tr>
@@ -143,7 +143,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
       <div className="card">
         {allMatches.length === 0 && <p className="muted">No matches.</p>}
         {allMatches.map((m) => (
-          <MatchRow key={m.id} m={m} waiting={waiting.filter((w) => w.position.round === m.round)} busy={busy} pending={pending} override={override} />
+          <MatchRow key={m.id} m={m} waiting={waiting.filter((w) => w.position.round === m.round)} busy={busy} isPending={isPending} override={override} />
         ))}
         <h3>Pair two waiting players</h3>
         <p className="muted small">From round two the two must share the same place in the tree (spec 5.4); in round one any two waiting players can be paired.</p>
@@ -156,7 +156,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
             <option value="">second…</option>
             {waiting.filter((w) => w.entry_id !== pairA).map((w) => <option key={w.entry_id} value={w.entry_id}>{w.name} (R{w.position.round})</option>)}
           </select>
-          <ActBtn label="Pair two waiting players" pending={pending} busy={busy} className="sm" disabled={!pairA || !pairB} onClick={() => override("Pair two waiting players", "POST", `/api/admin/competitions/${compId}/override/pair`, { entry_id_a: pairA, entry_id_b: pairB }).then(() => { setPairA(""); setPairB(""); })}>Pair</ActBtn>
+          <ActBtn label="Pair two waiting players" isPending={isPending} busy={busy} className="sm" disabled={!pairA || !pairB} onClick={() => override("Pair two waiting players", "POST", `/api/admin/competitions/${compId}/override/pair`, { entry_id_a: pairA, entry_id_b: pairB }).then(() => { setPairA(""); setPairB(""); })}>Pair</ActBtn>
         </div>
       </div>
 
@@ -167,7 +167,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
           {freePasses.map((fp) => (
             <li key={fp.id}>
               <span>{fp.entry.name} → R{fp.round + 1}</span>
-              <ActBtn label={`Revoke the free pass for ${fp.entry.name}`} pending={pending} busy={busy} className="sm danger" onClick={() => override(`Revoke the free pass for ${fp.entry.name}`, "DELETE", `/api/admin/competitions/${compId}/override/free-pass/${fp.id}`)}>Revoke</ActBtn>
+              <ActBtn label={`Revoke the free pass for ${fp.entry.name}`} isPending={isPending} busy={busy} className="sm danger" onClick={() => override(`Revoke the free pass for ${fp.entry.name}`, "DELETE", `/api/admin/competitions/${compId}/override/free-pass/${fp.id}`)}>Revoke</ActBtn>
             </li>
           ))}
         </ul>
@@ -179,7 +179,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
           <Btn
             className="sm"
             disabled={busy || !grantId}
-            pending={pending?.startsWith("Grant ") ?? false}
+            pending={[...pending].some((k) => k.startsWith("Grant "))}
             onClick={() => {
               const w = waiting.find((x) => x.entry_id === grantId)!;
               void override(`Grant ${w.name} a free pass to round ${w.position.round + 1}`, "POST", `/api/admin/competitions/${compId}/override/free-pass`, { entry_id: grantId, from_round: w.position.round }).then(() => setGrantId(""));
@@ -192,13 +192,13 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
 
       <h2>The night</h2>
       <div className="card row">
-        <ActBtn label="Reopen buy-backs" pending={pending} busy={busy} disabled={c.buybacks_open || c.current_round !== 1} onClick={() => override("Reopen buy-backs", "POST", `/api/admin/competitions/${compId}/override/reopen-buybacks`)} />
-        <ActBtn label="Grow bracket 16 → 32" pending={pending} busy={busy} disabled={c.bracket_size !== 16} onClick={() => override("Grow bracket 16 → 32", "POST", `/api/admin/competitions/${compId}/override/grow-bracket`)} />
+        <ActBtn label="Reopen buy-backs" isPending={isPending} busy={busy} disabled={c.buybacks_open || c.current_round !== 1} onClick={() => override("Reopen buy-backs", "POST", `/api/admin/competitions/${compId}/override/reopen-buybacks`)} />
+        <ActBtn label="Grow bracket 16 → 32" isPending={isPending} busy={busy} disabled={c.bracket_size !== 16} onClick={() => override("Grow bracket 16 → 32", "POST", `/api/admin/competitions/${compId}/override/grow-bracket`)} />
         {c.status === "in_progress" && (
           <Btn
             className="danger"
             disabled={busy}
-            pending={pending === "abandon"}
+            pending={isPending("abandon")}
             onClick={() => {
               void (async () => {
                 const ok = await ask({
@@ -253,7 +253,7 @@ function summarise(d: Record<string, unknown>): string {
     .join(" · ");
 }
 
-function MatchRow({ m, waiting, busy, pending, override }: { m: MatchView; waiting: EntryView[]; busy: boolean; pending: string | null; override: (label: string, method: string, path: string, body?: Record<string, unknown>) => Promise<boolean> }) {
+function MatchRow({ m, waiting, busy, isPending, override }: { m: MatchView; waiting: EntryView[]; busy: boolean; isPending: (key: string) => boolean; override: (label: string, method: string, path: string, body?: Record<string, unknown>) => Promise<boolean> }) {
   const [side, setSide] = useState<"a" | "b">("a");
   const [replacement, setReplacement] = useState("");
   const stateIcon = m.state === "in_play" ? "●" : m.state === "finished" ? "■" : "○";
@@ -262,8 +262,8 @@ function MatchRow({ m, waiting, busy, pending, override }: { m: MatchView; waiti
       <div className="head">
         <span>{m.label} <span className={`state ${m.state}`}>{stateIcon} {m.state.replace("_", " ")}</span></span>
         <span className="row">
-          <ActBtn label={`Reset ${m.label} to not started`} pending={pending} busy={busy} className="sm" disabled={m.state === "not_started"} onClick={() => override(`Reset ${m.label} to not started`, "POST", `/api/admin/matches/${m.id}/override/reset`)}>Reset</ActBtn>
-          {m.round === 1 && <ActBtn label={`Delete ${m.label}`} pending={pending} busy={busy} className="sm danger" onClick={() => override(`Delete ${m.label}`, "DELETE", `/api/admin/matches/${m.id}/override`)}>Delete</ActBtn>}
+          <ActBtn label={`Reset ${m.label} to not started`} isPending={isPending} busy={busy} className="sm" disabled={m.state === "not_started"} onClick={() => override(`Reset ${m.label} to not started`, "POST", `/api/admin/matches/${m.id}/override/reset`)}>Reset</ActBtn>
+          {m.round === 1 && <ActBtn label={`Delete ${m.label}`} isPending={isPending} busy={busy} className="sm danger" onClick={() => override(`Delete ${m.label}`, "DELETE", `/api/admin/matches/${m.id}/override`)}>Delete</ActBtn>}
         </span>
       </div>
       <div className="small">{m.a.name}{m.winner_id === m.a.entry_id ? " ✔" : ""} v {m.b.name}{m.winner_id === m.b.entry_id ? " ✔" : ""}</div>
@@ -279,7 +279,7 @@ function MatchRow({ m, waiting, busy, pending, override }: { m: MatchView; waiti
             <option value="">waiting player…</option>
             {waiting.map((w) => <option key={w.entry_id} value={w.entry_id}>{w.name}</option>)}
           </select>
-          <ActBtn label={`Replace a player in ${m.label}`} pending={pending} busy={busy} className="sm" disabled={!replacement} onClick={() => override(`Replace a player in ${m.label}`, "POST", `/api/admin/matches/${m.id}/override/replace-player`, { slot: side, entry_id: replacement }).then(() => setReplacement(""))}>Go</ActBtn>
+          <ActBtn label={`Replace a player in ${m.label}`} isPending={isPending} busy={busy} className="sm" disabled={!replacement} onClick={() => override(`Replace a player in ${m.label}`, "POST", `/api/admin/matches/${m.id}/override/replace-player`, { slot: side, entry_id: replacement }).then(() => setReplacement(""))}>Go</ActBtn>
         </div>
       )}
     </div>

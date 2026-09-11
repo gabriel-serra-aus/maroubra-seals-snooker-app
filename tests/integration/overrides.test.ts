@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { resetDbForTests } from "@/lib/db/client";
-import { api, find, loginAs, playCurrentRound, playMatch } from "./api";
+import { api, find, loginAs, playCurrentRound, playMatch, freeTable } from "./api";
 
 beforeAll(async () => {
   await resetDbForTests();
@@ -105,7 +105,7 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     comp = n.id;
     let b = await playCurrentRound(comp);
     const m9 = find.match(b, 9);
-    await api.startMatch(m9.id);
+    await api.startMatch(m9.id, { table: freeTable(b) });
     b = (await api.bracket(comp)).body;
     const m1 = find.match(b, 1);
     expect(m1.correction_blocked).toMatch(/R2M1 has started/);
@@ -207,7 +207,7 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     expect(b.competition?.status).toBe("in_progress");
     // Round two is under way, one match on the clock, when the club runs out of time.
     const m9 = find.match(b, 9);
-    expect((await api.startMatch(m9.id)).status).toBe(200);
+    expect((await api.startMatch(m9.id, { table: freeTable(b) })).status).toBe(200);
     const dry = await api.endNight(id, { dry_run: true });
     expect(dry.status).toBe(200);
     expect(dry.body.clocks_cancelled).toBe(1);

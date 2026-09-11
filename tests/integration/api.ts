@@ -103,7 +103,7 @@ export const api = {
   saveRatingReview: (id: string, changes: Array<{ player_id: string; new_rating: number }>) => call<{ written: number }>(ratingReview.POST, "POST", `/api/admin/competitions/${id}/rating-review`, { body: { changes }, params: { id } }),
   adminActions: (id: string) => call<{ actions: Array<{ actor: string; action: string; details: Record<string, unknown> }> }>(adminActions.GET, "GET", `/api/admin/competitions/${id}/admin-actions`, { params: { id } }),
   patchMatch: (id: string, body: unknown) => call<{ bracket: BracketPayload }>(matchById.PATCH, "PATCH", `/api/admin/matches/${id}`, { body, params: { id } }),
-  startMatch: (id: string, body: unknown = {}) => call<{ started_at: string; time_limit_minutes: number; bracket: BracketPayload }>(matchStart.POST, "POST", `/api/admin/matches/${id}/start`, { body, params: { id } }),
+  startMatch: (id: string, body: unknown = {}) => call<{ started_at: string; time_limit_minutes: number; table_number: number | null; bracket: BracketPayload; error?: string }>(matchStart.POST, "POST", `/api/admin/matches/${id}/start`, { body, params: { id } }),
   cancelStart: (id: string) => call<{ bracket: BracketPayload }>(matchCancel.POST, "POST", `/api/admin/matches/${id}/cancel-start`, { params: { id } }),
   complete: (id: string, winner_entry_id: string, loser_decision?: string) =>
     call<CompleteReply>(matchComplete.POST, "POST", `/api/admin/matches/${id}/complete`, { body: { winner_entry_id, loser_decision }, params: { id } }),
@@ -153,10 +153,18 @@ export const find = {
   matchesInRound: (b: BracketPayload, round: number) => b.rounds.find((r) => r.round === round)?.matches ?? [],
 };
 
-/** Starts and completes a match, player A winning unless told otherwise. */
+/** The lowest table no match in play is on (spec 5.14), for a Start. */
+export function freeTable(b: BracketPayload): number {
+  const busy = new Set(b.rounds.flatMap((r) => r.matches).filter((m) => m.state === "in_play").map((m) => m.table_number));
+  const t = Array.from({ length: b.competition!.table_count }, (_, i) => i + 1).find((n) => !busy.has(n));
+  if (!t) throw new Error("every table is busy");
+  return t;
+}
+
+/** Starts (on the lowest free table) and completes a match, player A winning unless told otherwise. */
 export async function playMatch(m: MatchView, winner: "a" | "b" = "a", decision?: string) {
   if (m.state === "not_started") {
-    const s = await api.startMatch(m.id);
+    const s = await api.startMatch(m.id, { table: freeTable((await api.bracket()).body) });
     if (s.status !== 200) throw new Error(`start ${m.label}: ${JSON.stringify(s.body)}`);
   }
   const r = await api.complete(m.id, winner === "a" ? m.a.entry_id : m.b.entry_id, decision);

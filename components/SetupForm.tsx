@@ -33,7 +33,7 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
   const [pickedIn, setPickedIn] = useState<Set<string>>(new Set()); // player ids, left list
   const [pickedOut, setPickedOut] = useState<Set<string>>(new Set()); // entry ids, right list
   const [adding, setAdding] = useState(false);
-  const { busy, pending, error, run, setError } = useAction();
+  const { busy, isPending, error, run, setError } = useAction();
   // Confirmations are the app's own centred card, never a browser dialog (spec 3.5).
   const { ask, dialog: confirmCard } = useDialog();
 
@@ -147,18 +147,18 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
                   <input type="radio" checked={B === s} disabled={busy || n > s} onChange={() => chooseSize(s)} /> {s}
                 </label>
               ))}
-              {pending === "size" && <span className="spinner" />}
+              {isPending("size") && <span className="spinner" />}
             </div>
           </div>
         </div>
         {c && (
           <p className="muted small">
-            Match time limit: <strong>{c.default_time_limit_minutes} min</strong>. Rating adjustment: top {c.rating_top_count} by {c.rating_top_delta}, bottom {c.rating_bottom_count} by +{c.rating_bottom_delta}.{" "}
+            Match time limit: <strong>{c.default_time_limit_minutes} min</strong>. Tables: <strong>{c.table_count}</strong>. Rating adjustment: top {c.rating_top_count} by {c.rating_top_delta}, bottom {c.rating_bottom_count} by +{c.rating_bottom_delta}.{" "}
             <Link href="/admin/settings">Change ›</Link>
           </p>
         )}
         {!c && (
-          <Btn className="primary wide" disabled={busy} pending={pending === "create"} onClick={create}>
+          <Btn className="primary wide" disabled={busy} pending={isPending("create")} onClick={create}>
             Set up tonight&apos;s competition
           </Btn>
         )}
@@ -193,7 +193,7 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
                 <Btn
                   className="primary"
                   disabled={busy || pickedIn.size === 0 || pickedIn.size > room}
-                  pending={pending === "add"}
+                  pending={isPending("add")}
                   title={pickedIn.size > room ? `Only ${room} slot${room === 1 ? "" : "s"} left in a ${B} bracket` : ""}
                   onClick={() => addPlayers(Array.from(pickedIn))}
                 >
@@ -224,7 +224,7 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
                   </li>
                 ))}
               </ul>
-              <Btn disabled={busy || pickedOut.size === 0} pending={pending === "remove"} onClick={removePlayers}>
+              <Btn disabled={busy || pickedOut.size === 0} pending={isPending("remove")} onClick={removePlayers}>
                 ‹ Remove{pickedOut.size ? ` ${pickedOut.size}` : ""}
               </Btn>
             </div>
@@ -237,7 +237,7 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
             {waiting ? ", 1 waiting player" : ""}, {open} open slot{open === 1 ? "" : "s"} for buy-backs
           </p>
           {n > B && <div className="error">More players than slots — choose the 32 bracket.</div>}
-          <Btn className="primary wide" disabled={busy || n < 2 || n > B} pending={pending === "start"} onClick={start}>
+          <Btn className="primary wide" disabled={busy || n < 2 || n > B} pending={isPending("start")} onClick={start}>
             Start Competition
           </Btn>
           <p className="small" style={{ marginTop: 16 }}>
@@ -249,7 +249,7 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
                 abandonSetup();
               }}
             >
-              {pending === "discard" && <span className="spinner" />}Discard this setup
+              {isPending("discard") && <span className="spinner" />}Discard this setup
             </a>
           </p>
         </>

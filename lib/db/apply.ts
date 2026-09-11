@@ -12,12 +12,12 @@ const ENTRY_COLS: (keyof EntryRow)[] = [
 ];
 const MATCH_COLS: (keyof MatchRow)[] = [
   "competition_id", "round", "number", "player_a_id", "player_b_id", "rating_a", "rating_b", "start_points",
-  "start_entry_id", "state", "origin", "time_limit_minutes", "started_at", "finished_at", "winner_id",
+  "start_entry_id", "state", "origin", "time_limit_minutes", "table_number", "started_at", "finished_at", "winner_id",
   "corrected_at", "created_at",
 ];
 const FREE_PASS_COLS: (keyof FreePassRow)[] = ["competition_id", "entry_id", "from_round", "granted_at"];
 const COMPETITION_COLS: (keyof CompetitionRow)[] = [
-  "name", "status", "bracket_size", "default_time_limit_minutes", "rating_top_count",
+  "name", "status", "bracket_size", "default_time_limit_minutes", "table_count", "rating_top_count",
   "rating_top_delta", "rating_bottom_count", "rating_bottom_delta", "started_at", "buybacks_closed_at",
   "completed_at", "abandoned_at", "winner_entry_id",
 ];

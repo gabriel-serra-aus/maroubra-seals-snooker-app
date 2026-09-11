@@ -51,6 +51,8 @@ export interface MatchView {
   /** The limit that applies: frozen once started, else the per-match override, else the default. */
   time_limit_minutes: number;
   has_own_time_limit: boolean;
+  /** The table the match is on (or was played on); null before start or when none was free (spec 5.14). */
+  table_number: number | null;
   started_at: string | null;
   finished_at: string | null;
   winner_id: string | null;
@@ -84,6 +86,12 @@ export interface RoundView {
 
 export interface BracketPayload {
   server_now: string;
+  /**
+   * The night's version (spec 7.2): the competition's `updated_at`, bumped by every write. Screens keep
+   * only a payload at least this new, so a poll answered from before a save can never overwrite it.
+   * Without a competition it is empty and any payload wins.
+   */
+  version: string;
   competition: null | {
     id: string;
     name: string;
@@ -91,6 +99,8 @@ export interface BracketPayload {
     bracket_size: number;
     rounds_total: number;
     default_time_limit_minutes: number;
+    /** Tables the club plays on tonight, 1..table_count (spec 5.14). */
+    table_count: number;
     rating_top_count: number;
     rating_top_delta: number;
     rating_bottom_count: number;
@@ -114,8 +124,17 @@ export interface BracketPayload {
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
 
+/**
+ * True when `incoming` is an older read of the same night than `current` (spec 7.2): the screen keeps
+ * what it has. A different night, or no night, is never stale — the next competition must show, and so
+ * must an abandoned one vanishing.
+ */
+export function bracketIsStale(incoming: BracketPayload, current: BracketPayload): boolean {
+  return !!incoming.competition && !!current.competition && incoming.competition.id === current.competition.id && incoming.version < current.version;
+}
+
 export function buildBracketPayload(s: Snapshot | null, now = new Date()): BracketPayload {
-  if (!s || s.competition.status === "abandoned") return { server_now: now.toISOString(), competition: null, rounds: [], entries: [], players: [] };
+  if (!s || s.competition.status === "abandoned") return { server_now: now.toISOString(), version: "", competition: null, rounds: [], entries: [], players: [] };
   const c = s.competition;
   const B = c.bracket_size;
   const view = (entryId: string): EntryView => {
@@ -149,6 +168,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
     start_entry_id: m.start_entry_id,
     time_limit_minutes: m.time_limit_minutes ?? c.default_time_limit_minutes,
     has_own_time_limit: m.time_limit_minutes !== null,
+    table_number: m.table_number,
     started_at: iso(m.started_at),
     finished_at: iso(m.finished_at),
     winner_id: m.winner_id,
@@ -195,6 +215,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
   }
   return {
     server_now: now.toISOString(),
+    version: iso(c.updated_at) ?? "",
     competition: {
       id: c.id,
       name: c.name,
@@ -202,6 +223,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       bracket_size: B,
       rounds_total: R,
       default_time_limit_minutes: c.default_time_limit_minutes,
+      table_count: c.table_count,
       rating_top_count: c.rating_top_count,
       rating_top_delta: c.rating_top_delta,
       rating_bottom_count: c.rating_bottom_count,

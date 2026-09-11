@@ -25,6 +25,7 @@ Used consistently in code, UI and this document.
 | **Close Buy-Backs** | Locks the player list. The button reads **No More Buy-Backs / Late Entries** (§11) |
 | **End night here** | Closes a night that ran out of time: complete, no winner, "completed (unfinished)" (O-16). Not the same as **Abandon** |
 | **Master override** | Organiser screen that can change anything, bypassing the normal guards (O-5) |
+| **Table** | One of the club's snooker tables, numbered `1..table_count` (four unless the night says otherwise). A match in play occupies one (5.14) |
 
 ---
 
@@ -160,7 +161,7 @@ There is no delete (O-9). If a player was added by mistake, deactivate them.
 
 Shown when no competition is in progress. Implements §8.1–8.2.
 
-Shows the competition name, bracket size, a one-line reminder of the time limit and rating scale linking to 3.10, two lists side by side (stacked on a phone) — **active** club players not yet entered, with a search box, and tonight's entered players — and a live summary line ("13 players → 6 matches, 1 waiting player, 3 open slots for buy-backs").
+Shows the competition name, bracket size, a one-line reminder of the time limit, tables and rating scale linking to 3.10, two lists side by side (stacked on a phone) — **active** club players not yet entered, with a search box, and tonight's entered players — and a live summary line ("13 players → 6 matches, 1 waiting player, 3 open slots for buy-backs").
 
 | Action | What happens |
 | --- | --- |
@@ -220,11 +221,17 @@ The main screen for the night. Lists every match with its state colour, the play
 
 **Start** and **Complete** are the taps of the night, so each is **the full width of its card**, in the list and in the tree alike; the rarer buttons stay small and wrap underneath.
 
-**The handicap start is shown twice on a card** (§6, 5.6): as "starts on 17" on the receiving player's own line — the one with the higher number — and again as the working under both names, so the number can be checked at the table without arithmetic. Level ratings read "level, no start". In the tree the start rides beside the weaker player's rating as "+17".
+**The handicap start is shown twice on a card** (§6, 5.6): as "starts on 17" on the receiving player's own line — the one with the higher number — and again as one short line of working under both names, "Alice Chen starts on 17 (⅔ of 25)", so the number can be checked at the table without arithmetic and without a sentence on every card (UX review, Sep 2026). Level ratings read "Level, no start". In the tree the start rides beside the weaker player's rating as "+17".
+
+**State chips and colours** (4.1, UX review Sep 2026): every card carries a chip — **LIVE** in felt green with the countdown beside it, **READY** in amber, **FINISHED** neutral grey, **AWAITING OPPONENT** amber — and the card itself is outlined green only while live and shaded neutral once finished. Red is kept for errors and for taps that cannot be undone. The title block above the list names the night, the player count and the bracket size, with three chips for how many matches are live, how many are ready, and whether buy-backs are open and how many slots are left.
+
+**Tables** (5.14): a strip along the top shows every table — green **Free**, or the match on it with its clock — and the title block's chips count the free ones. **Start asks which table**: a centred card lists the tables as large buttons, the free ones tappable and the busy ones greyed with the match on them, and the tap on a table is what starts the match. Nothing is picked in advance, and with every table busy the card says so and nothing can start. Every in-play card then carries a navy **Table 2** chip beside its state; tapping it moves the match to another free table (in play) or notes where it will go (not started). A match can never be put on a table another match is playing on. In the tree the table rides beside the clock as "T2".
+
+**Find player**: a name box beside the List | Tree switch. Typing narrows the list to matches involving that name and says where each of their entries stands ("Playing now in R1M2 against Dee Park · 12:40 left", "Waiting in R2M1 for the winner of R1M2", "Out — lost in round one").
 
 **Matches are named by round and position**: R1M1 … R1M8, R2M1 … R2M4, R3M1, R3M2 and **Final** for a 16 bracket (up to R4M2 and Final for 32). A card waiting for its second player says who fills it: in round one the next buy-back or late arrival (5.2), from round two the winner of the box below ("winner of R1M6"). The stored match number stays positional (5.4); only the display name differs.
 
-**The tapped button shows what it is doing.** It is disabled and carries a spinner, and every other button on the page is disabled, until the server answers; the reply carries the new bracket, so the screen updates without a second request. A double tap cannot start or complete a match twice. This applies to every button and player picker in the app.
+**The tapped button shows what it is doing.** It is disabled and carries a spinner until the server answers; the reply carries the new bracket, so the screen updates without a second request. A double tap cannot start or complete a match twice. **Only the match being updated is locked** (UX review, Sep 2026): a Start, Record result, Cancel start or limit change disables that card's buttons and no other, so the organiser can serve the next table while the first save is in flight. A night-wide tap — No More Buy-Backs, Force Pair, End night here, Abandon — locks the whole page. Replies are applied in version order (7.2), so two saves whose replies cross in the air, or a refresh answered from before a save, can never put an older bracket over a newer one.
 
 Rounds overlap: R2M1 can be in play while R1M7 has not started, so the list shows every round with anything in it, newest first, finished rounds collapsed. Once buy-backs close the round-one controls disappear (§10, §11).
 
@@ -232,10 +239,11 @@ Rounds overlap: R2M1 can be in play while R1M7 has not started, so the list show
 
 | Action | Available when | What happens |
 | --- | --- | --- |
-| **Start** | Match not started | Turns green, countdown begins from the match's limit (§12). The started time is stored on the server, so the clock keeps running wherever the organiser goes, after a refresh, and while the phone is locked. |
+| **Start** | Match not started, a table free | Asks which free table (5.14), then turns green and the countdown begins from the match's limit (§12). The started time is stored on the server, so the clock keeps running wherever the organiser goes, after a refresh, and while the phone is locked. |
+| Table 2 ▾ | Match not started or in play | Notes the table a match will go on (it stands in for the Start question while free), or moves a match in play to a free table. Blank clears it (5.14). |
 | limit: 25 min ▾ | Match not started | Overrides the time limit for this match only. Rarely needed, so it hides behind the card's note rather than taking a button. |
 | **Complete** | Match in play | Opens 3.5. A result cannot be entered on a match that has not started (§12). |
-| **⤺ Cancel start** | Match in play | Confirms, then returns the match to `not_started`, clears `started_at` and the frozen limit, writes an audit row. For the wrong match having been started (O-5). Players, ratings and start untouched. |
+| **⤺ Cancel start** | Match in play | Confirms, then returns the match to `not_started`, clears `started_at`, the frozen limit and the table, writes an audit row. For the wrong match having been started (O-5). Players, ratings and start untouched. |
 | **Review result** | Match finished, winner's next match not started | Opens 3.5 to change the result; the corrected winner is pulled back out of the next round (§12). Otherwise replaced by "Result locked: next match started" — the override (3.9) is the way through. |
 | **Force Pair** | Buy-backs open, ≥2 waiting in round one | Pairs two waiting players at random, whichever way they entered (§10). Under two waiting it is disabled with "Needs 2 waiting players". Never touches an existing match. Hidden once buy-backs close. |
 | **No More Buy-Backs / Late Entries** | Buy-backs open | Confirms, naming the consequence: "…2 players have no opponent and will go straight to round 2." Locks the player list and gives a free pass to **every** round-one player still without an opponent (O-4); the tree then moves on (5.3, 5.4). **The only way the window closes** (O-15): once every round-one match is finished a notice says so, names anyone waiting alone, and the button turns primary. |
@@ -258,6 +266,8 @@ Dialog opened from 3.4 (list or tree), centred like every dialog in the app. Imp
 **Every dialog in the app is the app's own.** `alert()`, `confirm()` and `prompt()` are not used anywhere: they cannot be styled, have no room for the consequences a confirmation here must show, and a phone set to suppress them answers "cancel" without the organiser seeing the question. Confirmations and the one text field that used to be a `prompt` (the per-match time limit) are the same centred `.sheet` card — a title that asks the question, the explanation, the consequences as bullets read from the action's `dry_run`, then **the button that goes ahead first** (red when it cannot be undone) and the one that backs out beside it. Escape and a backdrop tap back out; a text field validates in place. An ESLint rule (`no-restricted-globals`) keeps the browser dialogs out.
 
 The dialog asks for the winner, and for a round-one match where the loser has not already bought back, whether they buy back or decline (§3: **once**, and always the player's choice). From round two there is only the winner choice. If buy-backs are closed it reads "Buy-backs are closed. Bob Smith is out."
+
+**Nothing is chosen for the organiser** (UX review, Sep 2026). The dialog opens titled "Record result" with **no winner and no buy-back decision selected**; each is a large tappable row under "Who won?" and "Buy-back decision". **Save result stays disabled** until the winner and, when it is asked, the decision have both been tapped. A one-line summary above the buttons says what the tap will do — "Dee Park wins R1M2. Hal Ito buys back ($2)." — and changing the winner clears the decision, because it is now a different player's. On Save the dialog closes at once and the card carries the spinner (3.4), so the next result can be entered while this one saves; the reply's note appears at the top of the page.
 
 **Slots run out first come, first served** (O-3). Every buy-back consumes one open slot; when the last goes, "Buys back" is disabled with "No open slots left — Bob Smith is out", and the loser is out even though they were willing to pay. The remaining count is shown next to the option so the organiser sees it coming.
 
@@ -295,6 +305,14 @@ With no competition running it shows the player list and "No competition tonight
 
 **Actions:** none that change anything. Tapping a match expands it to show the start time and limit. List | Tree defaults as on 3.4 and is remembered on that device.
 
+**Live play first** (UX review, Sep 2026). The page has three sections, as tabs along the top of the navy header on a desktop and along the bottom of the screen on a phone:
+
+- **Tonight** (default): **Find my match** — a name box; typing shows where each of that player's entries stands, in the words of 3.4's Find player, with the table when they are playing ("Playing now on table 2 in R1M3 …") — then the **table strip** (every table, free or with its match and clock) and **Playing now** (every in-play match as a card with its **table** and the countdown as its headline, the two names either side of "vs", and the start on one line), **Up next** (every match with two players not yet started, earlier rounds first), **Waiting for an opponent** (lone players and free-pass holders as rows) and **Results** (finished matches, newest first, one line each: "Gus Ray beat Eve Long · bought back"). A finished night shows the winner, or "Night ended early — no winner this week", at the top.
+- **Draw**: the full bracket as in 3.4 — the same List | Tree switch, every round, open slots and free passes.
+- **Players**: the active club list as searchable rows with a **Handicap** column, and one line explaining it: lower is better, it can be negative, and the higher number starts with two thirds of the difference.
+
+With no competition the Tonight tab says nothing is running and that the draw appears the moment the organiser sets up the next night; Draw is disabled; Players still works. The hosting badge the free tier injects floats over the page, so the page keeps clear space under its last card.
+
 ### 3.9 Master override
 
 The escape hatch (O-5). Everything the normal screens refuse is possible here, on the organiser's word. It exists because a club night goes wrong in ways no specification predicts: the wrong name was ticked, two players swapped tables, someone went home, a result was entered against the wrong match an hour ago.
@@ -318,11 +336,11 @@ The override refuses only one thing: it will not leave the competition in a stat
 
 ### 3.10 Settings
 
-The two things that rarely change, kept off the setup screen so the night's setup is size and players only: the live competition's **match time limit** (§12) and the four **rating adjustment** numbers (top X by Y, bottom Z by W — O-1).
+The things that rarely change, kept off the setup screen so the night's setup is size and players only: the live competition's **match time limit** (§12), the number of **snooker tables** the club plays on tonight (5.14; **four** unless changed, carried over from the previous night), and the four **rating adjustment** numbers (top X by Y, bottom Z by W — O-1).
 
 With no competition set up it says so and links to 3.3: a new night starts with the previous night's values (7.4), so there is nothing to edit until one exists.
 
-Save writes through `PATCH /api/admin/competitions/{id}`. The time limit can change any time before the night is complete and affects matches not yet started; the rating scale is locked once the night has started (7.4). Reached from "Settings ›" at the bottom of 3.3, 3.4 and 3.9; not in the top bar.
+Save writes through `PATCH /api/admin/competitions/{id}`. The time limit and the table count can change any time before the night is complete (the count cannot drop below a table a match is playing on); the time limit affects matches not yet started; the rating scale is locked once the night has started (7.4). Reached from "Settings ›" at the bottom of 3.3, 3.4 and 3.9; not in the top bar.
 
 ### 3.11 History
 
@@ -340,9 +358,11 @@ Every past night in one place, and how the handicaps have moved across them (§1
 
 | State | Colour | Meaning |
 | --- | --- | --- |
-| `not_started` | none | Match exists, players known, clock has not begun. |
-| `in_play` | green | Clock is running (or has run out). |
-| `finished` | red | Winner recorded, clock stopped, winner advanced. |
+| `not_started` | amber chip **READY**, plain card | Match exists, players known, clock has not begun. |
+| `in_play` | green chip **LIVE**, green outline | Clock is running (or has run out). |
+| `finished` | neutral chip **FINISHED**, grey card | Winner recorded, clock stopped, winner advanced. |
+
+Red is not a match colour: it is reserved for errors and for buttons that cannot be undone (UX review, Sep 2026).
 
 "Timed out" is **not** a separate state. It is a warning on an in-play match once the clock reaches zero; the match stays green until a result is entered (§12).
 
@@ -360,8 +380,8 @@ Every past night in one place, and how the handicaps have moved across them (§1
 
 | From | To | Trigger | Guard | Side effects |
 | --- | --- | --- | --- | --- |
-| `not_started` | `in_play` | **Start** | Match has two players. | `started_at` set to now on the server. Time limit frozen for this match. |
-| `in_play` | `not_started` | **Cancel start** (O-5) | Match is `in_play`. | `started_at` and frozen limit cleared. Audit row. No result is involved, so nothing else changes. |
+| `not_started` | `in_play` | **Start** | Match has two players; a free table chosen (5.14). | `started_at` set to now on the server. Time limit frozen for this match. `table_number` set to the chosen table. |
+| `in_play` | `not_started` | **Cancel start** (O-5) | Match is `in_play`. | `started_at`, frozen limit and `table_number` cleared. Audit row. No result is involved, so nothing else changes. |
 | `in_play` | `in_play` (timed out) | Clock reaches zero | — | Voice alert on the organiser's device; warning shown everywhere. No data change. |
 | `in_play` | `finished` | **Complete** | Winner chosen. Round one: loser's buy-back decision chosen (unless already bought back, window closed, or no open slot). | Winner recorded, `finished_at` set, winner advanced up the tree (5.4). Loser buys back (takes a slot, placed at once per 5.2) or is out. Window untouched (O-15). |
 | `finished` | `finished` (new result) | **Review result** | Previous winner's next match not started (§12), and the previous loser's buy-back match not started (O-6). | Previous winner removed from the next round; new winner advanced. Details in 5.7. |
@@ -678,6 +698,18 @@ The minimum unit tests over `lib/`:
 - Overrides: delete refused from round two, pair needs the same box, add takes an open place and climbs, grow renumbers M9 → M17, reopen takes the close's passes back and refuses once a match reached through one has started (5.10).
 - No automatic close: the window outlives the last round-one result and a late arrival still gets in until the tap (5.3, O-15); abandon freeing the live slot (5.11).
 - End night here (O-16, 5.11): the night becomes complete with a null winner and every finished match kept, a match in play has its clock thrown away, the players left standing are named, a second tap is refused, the `dry_run` writes nothing, and the rating review still opens — labelling the furthest round reached `R2`, not "final".
+- Tables (5.14): Start without a table is refused naming the free ones, a busy or out-of-range table is refused, a finished match frees its table but keeps the number, Cancel start clears it, a table noted before start counts as the choice only while free, every table busy refuses the start, moving in play needs a free table, and the count cannot drop below a table in play.
+
+### 5.14 Tables
+
+The club plays on a few numbered snooker tables — **four** unless a night's settings say otherwise (`competitions.table_count`, 1–16, carried over from the previous night like the rating scale). A match **in play** occupies one table; a finished match keeps the number it was played on as a record but occupies nothing.
+
+- **Start needs a table chosen by the organiser** (`table`), which must be in range and free; the one noted on the match beforehand counts as the choice while it is still free. Nothing is picked for them: with no table the start is refused (`400`, naming the free tables), and with every table busy it is refused too (`409`). **A match never shares a table.** The screen asks with one button per free table and shows the busy ones greyed with the match on them.
+- **Cancel start** and the override **Reset** clear the table with the clock; **End night here** and **Abandon** clear it on every match whose clock they discard.
+- **Move / note a table** (`PATCH /api/admin/matches/{id} { table_number }`): before start any number in range is a note of where the match will go; in play the table must be free; a finished match is refused; `null` clears.
+- **Table count** can change any time before the night is complete, but not below a table a match is currently playing on (`409`).
+
+Nothing about tables changes who plays whom or who advances; it exists so a player can walk to the right table and the organiser can see what is free.
 
 ## 6. Data model
 
@@ -752,6 +784,7 @@ There is no delete route and no `on delete cascade` pointing at this table: hist
 | status | competition_status | not null, default `'setup'` |
 | bracket_size | smallint | not null, `check (bracket_size in (16, 32))` |
 | default_time_limit_minutes | smallint | not null, default 25, `check (between 1 and 180)` |
+| table_count | smallint | not null, default 4, `check (between 1 and 16)` — the club's snooker tables tonight (5.14) |
 | rating_top_count | smallint | not null, default 3, `check (>= 0)` (O-1) |
 | rating_top_delta | smallint | not null, default **−1** (O-1) |
 | rating_bottom_count | smallint | not null, default 3, `check (>= 0)` (O-1) |
@@ -762,6 +795,7 @@ There is no delete route and no `on delete cascade` pointing at this table: hist
 | abandoned_at | timestamptz | nullable (O-7); `check ((abandoned_at is null) = (status <> 'abandoned'))` |
 | winner_entry_id | uuid | FK → entries, nullable — **null on a night ended early** (O-16) |
 | created_at | timestamptz | not null, default now() |
+| updated_at | timestamptz | not null, default now(). Bumped by every write to the night inside its transaction; the bracket JSON carries it as `version` (7.2) |
 
 At most one competition may be `setup` or `in_progress` at a time: partial unique index on a constant, `((1)) where status in ('setup','in_progress')`. Abandoning (5.11) frees it immediately.
 
@@ -805,6 +839,7 @@ The four rating columns are snapshotted from the previous competition when a new
 | state | match_state | not null, default `'not_started'` |
 | origin | match_origin | not null |
 | time_limit_minutes | smallint | nullable; per-match override before start, frozen at start, cleared again by Cancel start (O-5) |
+| table_number | smallint | nullable, `check (>= 1)`; the table the match is on, chosen at Start, cleared by Cancel start, kept once finished (5.14) |
 | started_at | timestamptz | nullable; `check ((started_at is null) = (state = 'not_started'))` |
 | finished_at | timestamptz | nullable; `check ((finished_at is null) = (state <> 'finished'))` |
 | winner_id | uuid | FK → entries, nullable; `check ((winner_id is null) = (state <> 'finished'))`; must equal `player_a_id` or `player_b_id` |
@@ -869,7 +904,7 @@ Verifying a cookie means splitting off the name, looking it up in `ADMIN_CODES`,
 
 | Method + route | Returns | Cookie |
 | --- | --- | --- |
-| `GET /api/public/bracket` | The current (or most recent non-abandoned) competition: status, current round, `rounds_total`, `buybacks_closed_at`, open slots, and for every round its matches (players, ratings, start, state, `started_at`, `time_limit_minutes`, winner), the boxes awaiting an opponent, all free passes, and `boxes` — every box of the round for the tree view (match, lone player, pass-through, or empty); the winner; and `server_now`. `Cache-Control: s-maxage=5, stale-while-revalidate=10`. | No |
+| `GET /api/public/bracket` | The current (or most recent non-abandoned) competition: status, current round, `rounds_total`, `buybacks_closed_at`, open slots, and for every round its matches (players, ratings, start, state, `started_at`, `time_limit_minutes`, winner), the boxes awaiting an opponent, all free passes, and `boxes` — every box of the round for the tree view (match, lone player, pass-through, or empty); the winner; `server_now`; and `version` — the competition's `updated_at`, which every write bumps inside its own transaction. A screen keeps a payload only when its `version` is at least the one it shows (same competition), so a refresh answered from before a save, or two replies crossing in the air, never replace a newer bracket with an older one. `Cache-Control: s-maxage=5, stale-while-revalidate=10`. | No |
 | `GET /api/public/players` | All **active** players with ratings. | No |
 
 The `s-maxage=5` cache is a **cost control**, not a nicety — see CLAUDE.md. The admin bracket calls the same payload via `GET /api/admin/bracket` (cookie required, uncached) so the organiser is never behind the CDN.
@@ -891,8 +926,8 @@ All require the cookie.
 
 | Method + route | Input | Validation |
 | --- | --- | --- |
-| `POST /api/admin/competitions` | `{ name, bracket_size, default_time_limit_minutes?, rating_*? }` | No other competition `setup` or `in_progress`; size ∈ {16, 32}; limit 1–180; rating counts ≥ 0. Time limit and rating settings default from the previous competition. Creates in `setup`; the reply carries the empty `bracket`. |
-| `PATCH /api/admin/competitions/{id}` | any of `{ name, bracket_size, default_time_limit_minutes, rating_* }` | `bracket_size` and `rating_*` only while `setup`. `default_time_limit_minutes` any time before `complete`; affects matches not yet started. What 3.3 and 3.10 call. |
+| `POST /api/admin/competitions` | `{ name, bracket_size, default_time_limit_minutes?, table_count?, rating_*? }` | No other competition `setup` or `in_progress`; size ∈ {16, 32}; limit 1–180; tables 1–16; rating counts ≥ 0. Table count and rating settings default from the previous competition (four tables on the first night). Creates in `setup`; the reply carries the empty `bracket`. |
+| `PATCH /api/admin/competitions/{id}` | any of `{ name, bracket_size, default_time_limit_minutes, table_count, rating_* }` | `bracket_size` and `rating_*` only while `setup`. `default_time_limit_minutes` and `table_count` any time before `complete`; the limit affects matches not yet started, the count cannot drop below a table in play (`409`, 5.14). What 3.3 and 3.10 call. |
 | `POST /api/admin/competitions/{id}/entries` | `{ player_id }`, `{ new_player: {...} }` or `{ player_ids: [...] }` | Player must be active (O-9). `setup`: adds a first-draw entry; total ≤ `bracket_size`. `in_progress` with buy-backs open: adds a **late arrival** as a `late` entry (§3, §8.3), requires an open slot (O-3), places at once (5.2); the reply carries `match_number` or `awaiting_in`. A player already in tonight's competition is `409`; a round-one loser is `409` naming Review result. `player_ids` (up to 64) is `setup` only. |
 | `DELETE /api/admin/competitions/{id}/entries/{entry_id}` | — | `setup` only. Removing a player from a running night is an override. |
 | `DELETE /api/admin/competitions/{id}/entries` | `{ entry_ids: [...] }` | Several at once, `setup` only. |
@@ -909,8 +944,8 @@ All require the cookie. **Automatic transitions (advancement up the tree, comple
 
 | Method + route | Input | Validation |
 | --- | --- | --- |
-| `PATCH /api/admin/matches/{id}` | `{ time_limit_minutes }` | Match `not_started`; 1–180, or `null` to revert to the competition default. |
-| `POST /api/admin/matches/{id}/start` | `{ time_limit_minutes? }` | Match `not_started` (`409` otherwise). Sets `started_at = now()`, freezes the limit, `state = in_play`. |
+| `PATCH /api/admin/matches/{id}` | `{ time_limit_minutes }` and/or `{ table_number }` | Limit: match `not_started`; 1–180, or `null` to revert to the competition default. Table (5.14): 1–`table_count` or `null`; before start a note, in play the table must be free (`409`), refused on a finished match. |
+| `POST /api/admin/matches/{id}/start` | `{ table, time_limit_minutes? }` | Match `not_started` (`409` otherwise). `table` 1–`table_count` and free (`409` when in use, `400` when missing, naming the free tables; a table noted on the match beforehand stands in while free). Sets `started_at = now()`, freezes the limit, `state = in_play`, `table_number = table` (5.14); the reply carries `table_number`. |
 | `POST /api/admin/matches/{id}/cancel-start` | — | Match `in_play` (`409` otherwise). Runs 5.8, writes an `admin_actions` row (O-5). |
 | `POST /api/admin/matches/{id}/complete` | `{ winner_entry_id, loser_decision? }` | Match `in_play` (`409` if `not_started`, per §12, or already `finished`). Winner must be a player of the match. Round one, loser eligible, buy-backs open: `loser_decision` required ∈ {`bought_back`, `declined`}; `bought_back` requires an open slot or the server records `no_slots` and returns the reason (O-3). Otherwise `loser_decision` must be absent. Then `state = finished`, `finished_at`, `winner_id`; apply the decision and place a buy-back (5.2); run advancement (5.4), which also detects completion. The window is untouched (O-15). The reply's `winner_to` says where the winner went: `match` (with `match_number`), `awaiting`, `free_pass` (with `round`) or `winner`. |
 | `POST /api/admin/matches/{id}/correct` | `{ winner_entry_id, loser_decision? }` | Match `finished`; guards in 5.7 — `409` if the winner's next match has started, or if the loser's buy-back match has started (O-6). Same decision rules as complete. Runs 5.7 and sets `corrected_at`. |

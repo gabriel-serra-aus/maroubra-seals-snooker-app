@@ -12,7 +12,7 @@ afterAll(() => resetDbForTests());
 describe("schema (spec 6)", () => {
   it("applies the migration on an in-memory PGlite database", async () => {
     const rows = await db.query<{ name: string }>("select name from schema_migrations order by name");
-    expect(rows.map((r) => r.name)).toEqual(["0001_init.sql", "0002_fixed_bracket.sql", "0003_late_arrivals.sql"]);
+    expect(rows.map((r) => r.name)).toEqual(["0001_init.sql", "0002_fixed_bracket.sql", "0003_late_arrivals.sql", "0004_competition_version.sql", "0005_tables.sql"]);
     const tables = await db.query<{ table_name: string }>(
       "select table_name from information_schema.tables where table_schema = 'public' order by table_name",
     );

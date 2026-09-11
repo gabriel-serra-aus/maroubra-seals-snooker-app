@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { addLateArrival, closeBuybacks } from "@/lib/logic/buybacks";
-import { completeMatch, startMatch } from "@/lib/logic/matchControl";
+import { completeMatch } from "@/lib/logic/matchControl";
 import { halfFullPairs, matchNumberForSlot, mateSlot, openSlots, positionOf, waitingEntries } from "@/lib/logic/derive";
-import { entry, hasMatch, makeCtx, match, nameOf, play, slotEntry, startNight } from "./helpers";
+import { entry, hasMatch, makeCtx, match, nameOf, play, slotEntry, startNight, startOn } from "./helpers";
 
 const ratings = (n: number) => Array.from({ length: n }, (_, i) => 20 + i);
 
@@ -120,7 +120,7 @@ describe("capacity (O-3)", () => {
     expect(m8.number).toBe(8);
     const loserBb = r1.loser.buybackEntryId!;
     // Buy-back loser is not offered the choice: passing a decision is a 400.
-    startMatch(s, ctx, m8.id);
+    startOn(s, ctx, m8.id);
     const winner = m8.player_a_id === loserBb ? m8.player_b_id : m8.player_a_id;
     expect(() => completeMatch(s, ctx, m8.id, winner, "bought_back")).toThrow(/No buy-back decision/);
     const r = completeMatch(s, ctx, m8.id, winner);
@@ -152,7 +152,7 @@ describe("late arrivals (rules 3, 8.3): flagged late, not buy-back, and still en
     const m = r1.loser.buybackMatch!;
     expect([m.player_a_id, m.player_b_id]).toContain(late.id);
     // Late loses: eligible, and their buy-back references the late entry.
-    startMatch(s, ctx, m.id);
+    startOn(s, ctx, m.id);
     const other = m.player_a_id === late.id ? m.player_b_id : m.player_a_id;
     expect(() => completeMatch(s, ctx, m.id, other)).toThrow(/loser_decision is required/);
     const r = completeMatch(s, ctx, m.id, other, "bought_back");
@@ -164,7 +164,7 @@ describe("late arrivals (rules 3, 8.3): flagged late, not buy-back, and still en
     expect(openSlots(s)).toBe(0);
     // Their buy-back loses: out, no second buy-back (rules 3).
     const m2 = s.matches.find((x) => x.round === 1 && (x.player_a_id === bb.id || x.player_b_id === bb.id))!;
-    startMatch(s, ctx, m2.id);
+    startOn(s, ctx, m2.id);
     const other2 = m2.player_a_id === bb.id ? m2.player_b_id : m2.player_a_id;
     expect(() => completeMatch(s, ctx, m2.id, other2, "bought_back")).toThrow(/No buy-back decision/);
     completeMatch(s, ctx, m2.id, other2);

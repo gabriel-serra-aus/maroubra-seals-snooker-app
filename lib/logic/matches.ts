@@ -45,6 +45,7 @@ export function createMatch(
     state: "not_started",
     origin,
     time_limit_minutes: null,
+    table_number: null,
     started_at: null,
     finished_at: null,
     winner_id: null,
