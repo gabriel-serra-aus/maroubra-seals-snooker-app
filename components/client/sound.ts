@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { matchClock } from "@/lib/timer";
 import type { MatchView } from "@/lib/bracket/payload";
+import { useStoredChoice } from "./hooks";
 
 // Phones only allow sound after a tap (spec 3.6). Any tap on an admin page unlocks it; a fresh page load
 // with matches already running shows a one-time "Enable sound" prompt.
@@ -41,9 +42,17 @@ export function speak(text: string) {
   }
 }
 
-export function useSoundUnlocked() {
+/**
+ * The sound switch (spec 3.6). Two things have to be true for the voice to play: the browser has been
+ * unlocked by a tap, and the organiser has not turned the sound off. The off choice is remembered on the
+ * device, and while it stands no tap re-enables it.
+ */
+export function useSound(): { on: boolean; toggle: () => void } {
+  const [pref, setPref] = useStoredChoice<"on" | "off">("sound", "on", "on");
   const [state, setState] = useState(unlocked);
+  const wanted = pref === "on";
   useEffect(() => {
+    if (!wanted) return;
     const l = () => setState(true);
     listeners.add(l);
     // Any tap on the page counts (pressing Start does), so listen once.
@@ -53,8 +62,21 @@ export function useSoundUnlocked() {
       listeners.delete(l);
       window.removeEventListener("pointerdown", onTap);
     };
-  }, []);
-  return state;
+  }, [wanted]);
+  const on = wanted && state;
+  const toggle = () => {
+    if (on) {
+      // Turning it off mid-sentence should go quiet now, not after "Match timed out" finishes.
+      if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+      setPref("off");
+    } else {
+      setPref("on");
+      // This runs inside the tap, which is what the browser wants.
+      unlockSound();
+      setState(unlocked);
+    }
+  };
+  return { on, toggle };
 }
 
 /**

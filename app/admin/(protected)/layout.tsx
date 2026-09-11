@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { LogoutButton } from "@/components/LogoutButton";
+import { AdminNav, UserMenu } from "@/components/AdminNav";
 import { currentSession } from "@/lib/auth/server";
 
 export const dynamic = "force-dynamic";
 
-/** Every admin page: a valid cookie or a redirect to login, and "Signed in as" in the header (spec 3.1). */
+/** Every admin page: a valid cookie or a redirect to login, and who is signed in at the right (spec 3.1). */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
   if (!session) redirect("/admin/login");
@@ -20,21 +20,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <img src="/club-logo-small.png" alt="" className="logo-sm" />
               <span className="brand-name">Maroubra Seals Snooker</span>
             </Link>
-            <span className="nav-links">
-              <Link href="/admin"><strong>Tonight</strong></Link>
-              <Link href="/admin/setup">Setup</Link>
-              <Link href="/admin/players">Players</Link>
-              <Link href="/admin/ratings">Ratings</Link>
-              <Link href="/admin/history">History</Link>
-              <Link href="/admin/settings">Settings</Link>
-              <Link href="/admin/override">Override</Link>
-            </span>
+            <AdminNav />
           </nav>
-          <span className="row small who">
-            <span className="avatar" aria-hidden>{session.name.slice(0, 1).toUpperCase()}</span>
-            <span>{session.name}</span>
-            <LogoutButton />
-          </span>
+          <UserMenu name={session.name} />
         </div>
       </div>
       {children}

@@ -18,7 +18,7 @@ interface Geo {
   pitch: number;
 }
 const geometry = (withButtons: boolean): Geo => {
-  const boxH = withButtons ? 68 : 46;
+  const boxH = withButtons ? 76 : 54;
   return { boxH, pitch: boxH + 12 };
 };
 
@@ -120,33 +120,33 @@ function Box({ b, g, x, y, now, round, bracketSize, onSelect, actions }: { b: Bo
       </text>
       {m ? (
         <>
-          <Line e={m.a} x={x + 12} y={top + 19} winner={m.winner_id === m.a.entry_id} loser={m.state === "finished" && m.winner_id !== m.a.entry_id} rating={m.rating_a} start={m.start_entry_id === m.a.entry_id ? m.start_points : 0} />
-          <Line e={m.b} x={x + 12} y={top + 37} winner={m.winner_id === m.b.entry_id} loser={m.state === "finished" && m.winner_id !== m.b.entry_id} rating={m.rating_b} start={m.start_entry_id === m.b.entry_id ? m.start_points : 0} />
-          {actions && <BoxButton m={m} x={x + 12} y={top + 44} actions={actions} />}
+          <Line e={m.a} x={x + 12} y={top + 26} winner={m.winner_id === m.a.entry_id} loser={m.state === "finished" && m.winner_id !== m.a.entry_id} rating={m.rating_a} start={m.start_entry_id === m.a.entry_id ? m.start_points : 0} />
+          <Line e={m.b} x={x + 12} y={top + 43} winner={m.winner_id === m.b.entry_id} loser={m.state === "finished" && m.winner_id !== m.b.entry_id} rating={m.rating_b} start={m.start_entry_id === m.b.entry_id ? m.start_points : 0} />
+          {actions && <BoxButton m={m} x={x + 12} y={top + 51} actions={actions} />}
           {actions && m.state === "finished" && !m.correction_blocked && (
-            <text x={x + 12} y={top + 57} className="tree-sub">
+            <text x={x + 12} y={top + 64} className="tree-sub">
               tap to review the result
             </text>
           )}
         </>
       ) : b.entry ? (
         <>
-          <Line e={b.entry} x={x + 12} y={top + 19} />
-          <text x={x + 12} y={top + 37} className="tree-sub">
+          <Line e={b.entry} x={x + 12} y={top + 26} />
+          <text x={x + 12} y={top + 43} className="tree-sub">
             {b.free_pass ? "free pass" : feeders && b.entry.slot !== null ? `awaiting winner of ${feederLabel(bracketSize, b.entry.slot, round)}` : "awaiting opponent"}
           </text>
         </>
       ) : feeders ? (
         <>
-          <text x={x + 12} y={top + 19} className="tree-sub">
+          <text x={x + 12} y={top + 26} className="tree-sub">
             winner of {feeders[0]}
           </text>
-          <text x={x + 12} y={top + 37} className="tree-sub">
+          <text x={x + 12} y={top + 43} className="tree-sub">
             winner of {feeders[1]}
           </text>
         </>
       ) : (
-        <text x={x + 12} y={top + 28} className="tree-sub">
+        <text x={x + 12} y={top + BOX_H / 2 + 4} className="tree-sub">
           open
         </text>
       )}

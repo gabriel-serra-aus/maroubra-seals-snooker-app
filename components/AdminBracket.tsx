@@ -11,16 +11,15 @@ import { Btn, Spinner } from "./Btn";
 import { CompleteDialog, type CompleteReply, type CompleteRequest } from "./CompleteDialog";
 import { useDialog } from "./Dialog";
 import { MatchCard, actionKey, matchOfKey, type MatchActions } from "./MatchCard";
-import { SoundBanner } from "./SoundBanner";
 import { TablePicker, TableStrip } from "./Tables";
 import { PlayerFinder } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 import { get, patch, post } from "./client/api";
 import { roundName } from "./client/format";
 import { useAction, usePoll, useServerClock, useStoredChoice, useWideScreen } from "./client/hooks";
-import { unlockSound, useSoundUnlocked, useTimeoutAlert } from "./client/sound";
+import { unlockSound, useSound, useTimeoutAlert } from "./client/sound";
 
-type Dialog = { kind: "complete" | "correct"; m: MatchView } | { kind: "match" | "table"; id: string } | { kind: "add" } | null;
+type Dialog = { kind: "complete" | "correct"; m: MatchView } | { kind: "match" | "table" | "move"; id: string } | { kind: "add" } | null;
 type ClubPlayer = { id: string; name: string; rating: number; active: boolean };
 type WithBracket = { bracket: BracketPayload };
 
@@ -29,7 +28,7 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
   const router = useRouter();
   const { data: b, setData, refresh } = usePoll<BracketPayload>("/api/admin/bracket", 5_000, initial, bracketIsStale);
   const now = useServerClock(b.server_now);
-  const soundOn = useSoundUnlocked();
+  const { on: soundOn, toggle: toggleSound } = useSound();
   const allMatches = b.rounds.flatMap((r) => r.matches);
   useTimeoutAlert(allMatches, now, soundOn);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -93,13 +92,18 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
   // Which tables are free right now (spec 5.14), for the placeholder of the table dialog.
   const busyTables = new Set(allMatches.filter((m) => m.state === "in_play" && m.table_number).map((m) => m.table_number!));
   const freeTables = Array.from({ length: c.table_count }, (_, i) => i + 1).filter((t) => !busyTables.has(t));
-  const freeTableHint = freeTables.length ? `free: ${freeTables.join(", ")}` : "every table is busy";
 
   /** The table was picked (spec 5.14): start the match on it. The picker closes and the card carries the spinner. */
   const startOn = (m: MatchView, table: number) => {
     setDialog(null);
     unlockSound();
     void onMatch(m, "start", () => post<WithBracket>(`/api/admin/matches/${m.id}/start`, { table }));
+  };
+
+  /** A table was picked for a match already in play, or noted for one not yet started (spec 5.14). */
+  const moveTo = (m: MatchView, table: number | null) => {
+    setDialog(null);
+    void onMatch(m, "table", () => patch<WithBracket>(`/api/admin/matches/${m.id}`, { table_number: table }));
   };
 
   /** A result from the dialog (spec 3.5): the dialog closes at once and the card carries the spinner. */
@@ -117,27 +121,8 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
     pending: (action, m) => isPending(actionKey(action, m)),
     // Start asks which free table first (spec 5.14); the pick is what sends the request.
     onStart: (m) => setDialog({ kind: "table", id: m.id }),
-    onSetTable: (m) => {
-      void (async () => {
-        const v = await askText({
-          title: m.state === "in_play" ? `Move ${m.label} to another table` : `Table for ${m.label}`,
-          body: m.state === "in_play" ? `A table from 1 to ${c.table_count} that no other match is on. Leave it blank for none.` : `Note the table this match will go on, 1 to ${c.table_count}. Leave it blank to let Start pick the lowest free table.`,
-          label: "Table",
-          initial: m.table_number ? String(m.table_number) : "",
-          placeholder: freeTableHint,
-          numeric: true,
-          confirm: "Set the table",
-          validate: (raw) => {
-            if (raw.trim() === "") return null;
-            const n = Number(raw);
-            return Number.isInteger(n) && n >= 1 && n <= c.table_count ? null : `Enter a table number from 1 to ${c.table_count}`;
-          },
-        });
-        if (v === null) return;
-        const table = v.trim() === "" ? null : Number(v);
-        void onMatch(m, "table", () => patch<WithBracket>(`/api/admin/matches/${m.id}`, { table_number: table }));
-      })();
-    },
+    // Moving (or noting) a table shows the same table cards as Start (spec 5.14).
+    onSetTable: (m) => setDialog({ kind: "move", id: m.id }),
     onComplete: (m) => setDialog({ kind: "complete", m }),
     onCorrect: (m) => setDialog({ kind: "correct", m }),
     onCancelStart: (m) => {
@@ -246,6 +231,7 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
   const selected = dialog?.kind === "match" ? allMatches.find((m) => m.id === dialog.id) : undefined;
   // The match waiting for a table; the picker reads the live bracket so a table freed meanwhile shows free.
   const starting = dialog?.kind === "table" ? allMatches.find((m) => m.id === dialog.id && m.state === "not_started") : undefined;
+  const moving = dialog?.kind === "move" ? allMatches.find((m) => m.id === dialog.id && m.state !== "finished") : undefined;
 
   const liveCount = allMatches.filter((m) => m.state === "in_play").length;
   const readyCount = allMatches.filter((m) => m.state === "not_started").length;
@@ -261,16 +247,31 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
             {c.status === "complete" ? (c.ended_early ? "Complete (unfinished)" : "Complete") : roundName(c.current_round, c.rounds_total)}
           </p>
         </div>
-        <Link className="btn" href="/" target="_blank">
-          Public view ↗
-        </Link>
+        <div className="page-actions">
+          <Link className="btn" href="/" target="_blank">
+            Public view ↗
+          </Link>
+          {c.status === "in_progress" && (
+            <Btn disabled={busy} pending={isPending("end")} onClick={endNight}>
+              End night
+            </Btn>
+          )}
+          {c.status === "in_progress" && (
+            <button type="button" className="link-danger" disabled={busy} onClick={abandon}>
+              {isPending("abandon") && <Spinner />}Abandon night
+            </button>
+          )}
+        </div>
       </div>
       <div className="chips">
         <span className={`chip ${liveCount ? "in_play" : ""}`}>
           {liveCount ? <span className="dot" /> : null}
           {liveCount} live
         </span>
-        <span className={`chip ${readyCount ? "not_started" : ""}`}>{readyCount} ready</span>
+        <span className={`chip ${readyCount ? "not_started" : ""}`}>
+          {readyCount ? <span className="dot" /> : null}
+          {readyCount} ready
+        </span>
         <span className={`chip ${freeTables.length === 0 ? "not_started" : ""}`}>
           {freeTables.length} of {c.table_count} table{c.table_count === 1 ? "" : "s"} free
         </span>
@@ -297,35 +298,47 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
           </div>
         </div>
       )}
-      {roundOneOpen && (
-        <div className="card stack">
-          {!c.buybacks_open && c.buybacks_closed_at && <div className="muted small">Buy-backs closed. Losers from here on are out.</div>}
-          {roundOnePlayedOut && (
-            <div className="notice small">
-              Every round-one match is finished.
-              {waitingNames.length > 0 && <> Still waiting alone: {waitingNames.join(", ")}.</>} When nobody else is coming, tap No More Buy-Backs / Late Entries: everyone
-              still alone gets a free pass and the bracket moves on.
-            </div>
+      {/* The action bar: the night's taps at the left, find and List | Tree at the right (spec 3.4). */}
+      <div className="actionbar">
+        <div className="row">
+          {roundOneOpen && c.buybacks_open && c.open_slots > 0 && (
+            <Btn className="primary" disabled={busy} onClick={() => setDialog({ kind: "add" })}>
+              + Late entry
+            </Btn>
           )}
-          {c.buybacks_open && (
-            <div className="row">
-              {c.open_slots > 0 && (
-                <Btn className="primary" disabled={busy} onClick={() => setDialog({ kind: "add" })}>
-                  + Late entry
-                </Btn>
-              )}
-              <Btn className={roundOnePlayedOut ? "primary" : ""} disabled={busy} pending={isPending("close")} onClick={closeBuybacks}>
-                No More Buy-Backs / Late Entries
-              </Btn>
-              <Btn disabled={busy || waitingCount < 2} pending={isPending("force")} title={waitingCount < 2 ? "Needs 2 waiting players" : ""} onClick={forcePair}>
-                Force Pair{waitingCount < 2 ? " (needs 2 waiting)" : ""}
-              </Btn>
-            </div>
+          {roundOneOpen && c.buybacks_open && (
+            // "No More Buy-Backs / Late Entries" (O-15): the only thing that closes the window.
+            <Btn disabled={busy} pending={isPending("close")} title="No more buy-backs or late entries" onClick={closeBuybacks}>
+              Close entries
+            </Btn>
           )}
+          {roundOneOpen && c.buybacks_open && (
+            // Force Pair (spec 5.5): two waiting players into a match.
+            <Btn disabled={busy || waitingCount < 2} pending={isPending("force")} title={waitingCount < 2 ? "Needs 2 waiting players" : "Force Pair two waiting players"} onClick={forcePair}>
+              Pair players
+            </Btn>
+          )}
+          {c.status === "in_progress" && (
+            // The "Match timed out" voice needs one tap on a phone (spec 3.6).
+            <Btn title={soundOn ? "Turn off the match timed out voice alert" : "Enable the match timed out voice alert"} onClick={toggleSound}>
+              <SpeakerIcon muted={!soundOn} /> {soundOn ? "Sound on" : "Sound off"}
+            </Btn>
+          )}
+        </div>
+        <div className="row actionbar-right">
+          <PlayerFinder b={b} now={now} query={query} setQuery={setQuery} placeholder="Find player" />
+          <ViewToggle value={view} onChange={setView} />
+        </div>
+      </div>
+      {roundOneOpen && !c.buybacks_open && c.buybacks_closed_at && <div className="muted small">Buy-backs closed. Losers from here on are out.</div>}
+      {roundOnePlayedOut && (
+        <div className="notice small">
+          Every round-one match is finished.
+          {waitingNames.length > 0 && <> Still waiting alone: {waitingNames.join(", ")}.</>} When nobody else is coming, tap Close entries: everyone still alone gets a
+          free pass and the bracket moves on.
         </div>
       )}
       {c.status === "in_progress" && <TableStrip b={b} now={now} />}
-      <SoundBanner show={!soundOn && allMatches.some((m) => m.state === "in_play")} />
       {notice && (
         <div className="info" onClick={() => setNotice(null)}>
           {notice}
@@ -336,10 +349,6 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
           {error}
         </div>
       )}
-      <div className="toolbar">
-        <ViewToggle value={view} onChange={setView} />
-        <PlayerFinder b={b} now={now} query={query} setQuery={setQuery} placeholder="Find player" />
-      </div>
       {view === "tree" ? (
         <>
           {c.status === "in_progress" && <p className="muted small">Start and Record result are on each box. Tap a box for the time limit, cancel start or to review a result.</p>}
@@ -348,36 +357,6 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
       ) : (
         <BracketView b={b} now={now} actions={c.status === "in_progress" ? actions : undefined} query={query} />
       )}
-      <div className="footer-links">
-        <Link href="/admin/players">Players &amp; ratings ›</Link>
-        <Link href="/" target="_blank">Public page ›</Link>
-        <Link href="/admin/override">Master override ›</Link>
-        <Link href="/admin/settings">Settings ›</Link>
-        {c.status === "in_progress" && (
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              void endNight();
-            }}
-          >
-            {isPending("end") && <Spinner />}End night here ›
-          </a>
-        )}
-        {c.status === "in_progress" && (
-          <a
-            href="#"
-            className="danger"
-            style={{ color: "var(--red)" }}
-            onClick={(e) => {
-              e.preventDefault();
-              abandon();
-            }}
-          >
-            {isPending("abandon") && <Spinner />}Abandon night
-          </a>
-        )}
-      </div>
       {dialog?.kind === "complete" || dialog?.kind === "correct" ? (
         <CompleteDialog key={dialog.m.id} m={dialog.m} b={b} mode={dialog.kind} onClose={() => setDialog(null)} onSubmit={(body, describe) => submitResult(dialog.m, dialog.kind, body, describe)} />
       ) : null}
@@ -395,7 +374,8 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
           </div>
         </div>
       )}
-      {starting && <TablePicker b={b} m={starting} now={now} onPick={(t) => startOn(starting, t)} onClose={() => setDialog(null)} />}
+      {starting && <TablePicker b={b} m={starting} now={now} mode="start" onPick={(t) => startOn(starting, t)} onClose={() => setDialog(null)} />}
+      {moving && <TablePicker b={b} m={moving} now={now} mode="move" onPick={(t) => moveTo(moving, t)} onClear={() => moveTo(moving, null)} onClose={() => setDialog(null)} />}
       {dialog?.kind === "add" && <AddLateArrivalSheet b={b} onClose={() => setDialog(null)} onSaved={done} />}
       {confirmCard}
       {void refresh}
@@ -493,5 +473,24 @@ function AddLateArrivalSheet({ b, onClose, onSaved }: { b: BracketPayload; onClo
         </div>
       </div>
     </div>
+  );
+}
+
+function SpeakerIcon({ muted = false }: { muted?: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M11 5 6 9H2v6h4l5 4V5z" />
+      {muted ? (
+        <>
+          <path d="m16 9 5 6" />
+          <path d="m21 9-5 6" />
+        </>
+      ) : (
+        <>
+          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+          <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+        </>
+      )}
+    </svg>
   );
 }
