@@ -9,3 +9,7 @@ out/
 next-env.d.ts
 .netlify/
 .DS_Store
+
+# Local tooling
+.playwright-mcp/
+.claude/settings.local.json
