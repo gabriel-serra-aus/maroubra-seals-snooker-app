@@ -1,12 +1,13 @@
-// Inserts sample club players for local development. Skips names that already exist.
+// Inserts 10 sample club players for local development. Skips names that already exist.
+// Ratings are invented, golf-style (lower is better, negatives normal) per spec 5.6.
 // Usage: npm run db:seed   (uses DATABASE_URL, or the local PGlite database when unset)
 import { openDb } from "./_db.mjs";
 
 const players = [
-  ["Alice Chen", 45], ["Bob Smith", 20], ["Carl Diaz", 33], ["Dee Park", 30], ["Eve Long", 28],
-  ["Fay Ng", 41], ["Gus Ray", 25], ["Hal Ito", 36], ["Ida Roy", 36], ["Ivan Poe", 28],
-  ["Jo Kerr", 38], ["Kim Lau", 22], ["Lee Moss", 50], ["Max Bell", -3], ["Nia Ford", 15],
-  ["Oli Hart", 44], ["Pat Quin", 31], ["Raj Sen", 27], ["Sam Wood", 40], ["Tia Yu", 18],
+  ["Ronnie O'Sullivan", -12], ["Stephen Hendry", -8], ["Judd Trump", -6],
+  ["Steve Davis", -4], ["John Higgins", -2], ["Mark Selby", 0],
+  ["Neil Robertson", 3], ["Ding Junhui", 6], ["Jimmy White", 10],
+  ["Alex Higgins", 14],
 ];
 
 const { query, close, label } = await openDb();
