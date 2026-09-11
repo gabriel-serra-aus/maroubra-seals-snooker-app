@@ -199,6 +199,12 @@ p {
   .topbar:not(.public) .brand-name {
     display: none;
   }
+  /* The login pill stays on the phone, hard against the right edge; the tabs are along the bottom there. */
+  .topbar .login-link {
+    margin-left: auto;
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
   .topbar .who {
     margin-left: auto;
   }
@@ -316,6 +322,26 @@ p {
   font-weight: 700;
   font-size: 1.15rem;
   white-space: nowrap;
+}
+
+/* Organiser Login in the ribbon: a bordered pill so it reads as the way in, not a stray link (spec 3.1). */
+.topbar .login-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.topbar .login-link:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: #fff;
 }
 
 .topbar nav .logo-link {

@@ -130,9 +130,14 @@ Database size is under 10 MB after a year, and bandwidth ~2.6 GB/month against a
 - **Ask before adding a dependency, a hosting service, or a paid tier** — cheap and self-contained is a hard requirement.
 - Reference spec sections (`spec 5.4`) and organiser rulings (`per O-4`) when implementing or changing behaviour.
 - Keep this file short. Behaviour belongs in [spec.md](spec.md); details belong in the code.
+- **Do not read, search, edit or reference anything under `private/`** unless the organiser explicitly asks for a file in it by name. It holds the organiser's own documents, tracked in git but outside Claude's scope.
+
+<!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

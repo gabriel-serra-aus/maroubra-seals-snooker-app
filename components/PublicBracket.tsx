@@ -76,6 +76,13 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
             <span className="brand-name">Maroubra Seals Snooker</span>
           </span>
           <span className="topbar-tabs">{tabs}</span>
+          {/* The organiser's way in, on every screen: a labelled button in the ribbon, not a footer link. */}
+          <Link href="/admin/login" className="login-link">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
+            </svg>
+            Organiser Login
+          </Link>
         </div>
       </header>
       <main className="public-main">
@@ -147,9 +154,6 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
             <PlayersTable players={players.players} query={query} setQuery={setQuery} />
           </>
         )}
-        <p className="footer-links">
-          <Link href="/admin/login">Organiser login ›</Link>
-        </p>
       </main>
       <div className="bottom-tabs">{tabs}</div>
     </>
