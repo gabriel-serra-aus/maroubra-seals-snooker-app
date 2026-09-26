@@ -18,7 +18,7 @@ interface Geo {
   pitch: number;
 }
 const geometry = (withButtons: boolean): Geo => {
-  const boxH = withButtons ? 76 : 54;
+  const boxH = withButtons ? 84 : 54;
   return { boxH, pitch: boxH + 12 };
 };
 
@@ -57,7 +57,7 @@ function BoxButton({ m, x, y, actions }: { m: MatchView; x: number; y: number; a
   };
   // The full inner width of the box, so the tap of the night is the width of the card it sits on.
   const w = BOX_W - 24;
-  const h = 18;
+  const h = 26;
   return (
     <g
       className={`tree-btn ${action} ${locked ? "disabled" : ""}`}
@@ -78,7 +78,7 @@ function BoxButton({ m, x, y, actions }: { m: MatchView; x: number; y: number; a
       }}
     >
       <rect x={x} y={y} width={w} height={h} rx={4} />
-      <text x={x + w / 2} y={y + 12.5}>
+      <text x={x + w / 2} y={y + h / 2 + 4}>
         {label}
       </text>
     </g>
@@ -178,11 +178,11 @@ export function BracketTree({ b, now, onSelect, actions }: { b: BracketPayload; 
   const c = b.competition;
   if (!c) return null;
   const g = geometry(!!actions);
-  const BOX_H = g.boxH;
   const R = c.rounds_total;
   const B = c.bracket_size;
   const height = PAD * 2 + (B / 2) * g.pitch;
-  const width = (R + 1) * COL_W;
+  // The winner is named above the bracket, so the tree ends at the final.
+  const width = R * COL_W;
   const colX = (round: number) => PAD + (round - 1) * COL_W;
   const rounds = new Map(b.rounds.map((r) => [r.round, r]));
   const boxesOf = (round: number): BoxView[] => {
@@ -203,9 +203,6 @@ export function BracketTree({ b, now, onSelect, actions }: { b: BracketPayload; 
       lines.push(`M${xRight},${y1} H${xJoin} V${y2} H${xRight} M${xJoin},${yTo} H${xNext}`);
     }
   }
-  const finalY = boxY(g, R, 1);
-  const winnerX = colX(R + 1);
-  lines.push(`M${colX(R) + BOX_W},${finalY} H${winnerX}`);
   return (
     <>
       {drawnBeforeFixedBracket(b) && (
@@ -220,23 +217,10 @@ export function BracketTree({ b, now, onSelect, actions }: { b: BracketPayload; 
               {r === R ? "Final" : `Round ${r}`}
             </text>
           ))}
-          <text x={winnerX} y={PAD + 4} className="tree-head">
-            Winner
-          </text>
           <path d={lines.join(" ")} className="tree-lines" />
           {Array.from({ length: R }, (_, i) => i + 1).map((r) =>
             boxesOf(r).map((box) => <Box key={`${r}-${box.k}`} b={box} g={g} x={colX(r)} y={boxY(g, r, box.k) + 10} now={now} round={r} bracketSize={B} onSelect={onSelect} actions={actions} />),
           )}
-          <g className={`tree-box ${c.winner ? "winner" : "empty"}`}>
-            <rect x={winnerX} y={finalY + 10 - BOX_H / 2} width={BOX_W} height={BOX_H} rx={6} />
-            {c.winner ? (
-              <Line e={c.winner} x={winnerX + 12} y={finalY + 10 + 5} winner />
-            ) : (
-              <text x={winnerX + 12} y={finalY + 10 + 5} className="tree-sub">
-                to be decided
-              </text>
-            )}
-          </g>
         </svg>
       </div>
     </>

@@ -11,7 +11,7 @@ import { Btn, Spinner } from "./Btn";
 import { CompleteDialog, type CompleteReply, type CompleteRequest } from "./CompleteDialog";
 import { useDialog } from "./Dialog";
 import { MatchCard, actionKey, matchOfKey, type MatchActions } from "./MatchCard";
-import { TablePicker, TableStrip } from "./Tables";
+import { TablePicker, TableStrip, tableStates, type TableClaims } from "./Tables";
 import { PlayerFinder } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 import { get, patch, post } from "./client/api";
@@ -40,6 +40,16 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
   const { busy, pending, isPending, error, run, setError } = useAction();
   // A night-wide action (close, force pair, end, abandon) locks every card; a match action locks only
   // its own match, so the next table can be served while this one saves (spec 3.4).
+  // Tables a Start or Move is still claiming (spec 5.14): taken until the reply lands, so a second start
+  // tapped meanwhile cannot pick the same one.
+  const [claims, setClaims] = useState<TableClaims>(() => new Map());
+  const claim = (id: string, table: number | null) =>
+    setClaims((prev) => {
+      const next = new Map(prev);
+      if (table === null) next.delete(id);
+      else next.set(id, table);
+      return next;
+    });
   const nightBusy = [...pending].some((k) => matchOfKey(k) === null);
   const locked = (m: MatchView) => nightBusy || [...pending].some((k) => matchOfKey(k) === m.id);
   // Confirmations and the time-limit field are the app's own centred cards, never the browser's (spec 3.5).
@@ -89,21 +99,26 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
       setData(r.bracket);
     }, actionKey(action, m));
 
-  // Which tables are free right now (spec 5.14), for the placeholder of the table dialog.
-  const busyTables = new Set(allMatches.filter((m) => m.state === "in_play" && m.table_number).map((m) => m.table_number!));
-  const freeTables = Array.from({ length: c.table_count }, (_, i) => i + 1).filter((t) => !busyTables.has(t));
+  // Which tables are free right now (spec 5.14), counting those a start in flight has claimed.
+  const freeTables = tableStates(b, claims).filter((t) => !t.match);
 
   /** The table was picked (spec 5.14): start the match on it. The picker closes and the card carries the spinner. */
   const startOn = (m: MatchView, table: number) => {
     setDialog(null);
     unlockSound();
-    void onMatch(m, "start", () => post<WithBracket>(`/api/admin/matches/${m.id}/start`, { table }));
+    claim(m.id, table);
+    void onMatch(m, "start", () => post<WithBracket>(`/api/admin/matches/${m.id}/start`, { table })).finally(() => claim(m.id, null));
   };
 
   /** A table was picked for a match already in play, or noted for one not yet started (spec 5.14). */
   const moveTo = (m: MatchView, table: number | null) => {
     setDialog(null);
-    void onMatch(m, "table", () => patch<WithBracket>(`/api/admin/matches/${m.id}`, { table_number: table }));
+    // Only a match in play occupies a table; a note before start claims nothing.
+    const occupies = m.state === "in_play" && table !== null;
+    if (occupies) claim(m.id, table);
+    void onMatch(m, "table", () => patch<WithBracket>(`/api/admin/matches/${m.id}`, { table_number: table })).finally(() => {
+      if (occupies) claim(m.id, null);
+    });
   };
 
   /** A result from the dialog (spec 3.5): the dialog closes at once and the card carries the spinner. */
@@ -338,7 +353,7 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
           free pass and the bracket moves on.
         </div>
       )}
-      {c.status === "in_progress" && <TableStrip b={b} now={now} />}
+      {c.status === "in_progress" && <TableStrip b={b} now={now} claims={claims} />}
       {notice && (
         <div className="info" onClick={() => setNotice(null)}>
           {notice}
@@ -374,8 +389,8 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
           </div>
         </div>
       )}
-      {starting && <TablePicker b={b} m={starting} now={now} mode="start" onPick={(t) => startOn(starting, t)} onClose={() => setDialog(null)} />}
-      {moving && <TablePicker b={b} m={moving} now={now} mode="move" onPick={(t) => moveTo(moving, t)} onClear={() => moveTo(moving, null)} onClose={() => setDialog(null)} />}
+      {starting && <TablePicker b={b} m={starting} now={now} claims={claims} mode="start" onPick={(t) => startOn(starting, t)} onClose={() => setDialog(null)} />}
+      {moving && <TablePicker b={b} m={moving} now={now} claims={claims} mode="move" onPick={(t) => moveTo(moving, t)} onClear={() => moveTo(moving, null)} onClose={() => setDialog(null)} />}
       {dialog?.kind === "add" && <AddLateArrivalSheet b={b} onClose={() => setDialog(null)} onSaved={done} />}
       {confirmCard}
       {void refresh}

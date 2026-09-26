@@ -941,6 +941,7 @@ input.inline {
 /* Start and Record result take the whole card; anything beside them wraps underneath. */
 .match .actions .btn.wide {
   flex: 0 0 100%;
+  min-height: 56px;
 }
 
 /* The handicap start, on the weaker player's own line (rules 6). */
@@ -1517,11 +1518,6 @@ svg.tree {
 
 .tree-box.pass rect.edge {
   fill: var(--accent);
-}
-
-.tree-box.winner rect {
-  fill: var(--accent-bg);
-  stroke: var(--accent);
 }
 
 .tree-box.empty rect {

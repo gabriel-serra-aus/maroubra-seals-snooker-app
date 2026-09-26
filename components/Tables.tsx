@@ -5,13 +5,20 @@ import { formatRemaining, matchClock } from "@/lib/timer";
 import { Btn } from "./Btn";
 
 type TableState = { n: number; match: MatchView | null };
+/** Tables claimed by a Start or Move still on its way to the server: match id → table. */
+export type TableClaims = ReadonlyMap<string, number>;
 
-/** Every table tonight with the match on it, if any (spec 5.14). */
-export function tableStates(b: BracketPayload): TableState[] {
+/**
+ * Every table tonight with the match on it, if any (spec 5.14). A table a match is still being started
+ * or moved onto counts as taken, so two starts tapped in quick succession cannot pick the same one.
+ */
+export function tableStates(b: BracketPayload, claims?: TableClaims): TableState[] {
   const c = b.competition;
   if (!c) return [];
-  const live = b.rounds.flatMap((r) => r.matches).filter((m) => m.state === "in_play");
-  return Array.from({ length: c.table_count }, (_, i) => i + 1).map((n) => ({ n, match: live.find((m) => m.table_number === n) ?? null }));
+  const all = b.rounds.flatMap((r) => r.matches);
+  const live = all.filter((m) => m.state === "in_play");
+  const claimed = (n: number) => all.find((m) => claims?.get(m.id) === n) ?? null;
+  return Array.from({ length: c.table_count }, (_, i) => i + 1).map((n) => ({ n, match: live.find((m) => m.table_number === n) ?? claimed(n) }));
 }
 
 const shortName = (name: string) => {
@@ -35,7 +42,7 @@ function TableFace({ n, match, now }: { n: number; match: MatchView | null; now:
           <span className="table-sub">
             {shortName(match.a.name)} v {shortName(match.b.name)}
           </span>
-          <span className="table-clock">{clock ? (clock.timed_out ? "time up" : `${formatRemaining(clock.remaining_ms)} left`) : ""}</span>
+          <span className="table-clock">{clock ? (clock.timed_out ? "time up" : `${formatRemaining(clock.remaining_ms)} left`) : "starting…"}</span>
         </>
       )}
     </>
@@ -48,8 +55,8 @@ const tileClass = (match: MatchView | null, now: number) => {
 };
 
 /** The tables along the top of the page: green when free, the match and its clock when not. */
-export function TableStrip({ b, now }: { b: BracketPayload; now: number }) {
-  const tables = tableStates(b);
+export function TableStrip({ b, now, claims }: { b: BracketPayload; now: number; claims?: TableClaims }) {
+  const tables = tableStates(b, claims);
   if (tables.length === 0) return null;
   const free = tables.filter((t) => !t.match).length;
   return (
@@ -72,6 +79,7 @@ export function TablePicker({
   b,
   m,
   now,
+  claims,
   mode,
   onPick,
   onClear,
@@ -80,13 +88,14 @@ export function TablePicker({
   b: BracketPayload;
   m: MatchView;
   now: number;
+  claims: TableClaims;
   mode: "start" | "move";
   onPick: (table: number) => void;
   /** "move" only: take the match off its table (or clear a note on a match not yet started). */
   onClear?: () => void;
   onClose: () => void;
 }) {
-  const tables = tableStates(b);
+  const tables = tableStates(b, claims);
   const free = tables.filter((t) => !t.match).length;
   const title = mode === "start" ? `Start ${m.label}` : m.state === "in_play" ? `Move ${m.label}` : `Table for ${m.label}`;
   return (
