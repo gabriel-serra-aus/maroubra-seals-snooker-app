@@ -4,6 +4,7 @@ import { updatePlayer } from "@/lib/db/players";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { optionalBool, optionalRating, optionalString } from "@/lib/api/validate";
+import { photoUrl } from "@/lib/bracket/payload";
 
 export const PATCH = handle(async (request, { params }) => {
   const session = requireAdmin(request);
@@ -16,5 +17,5 @@ export const PATCH = handle(async (request, { params }) => {
   };
   const db = await getDb();
   const player = await db.transaction((tx) => updatePlayer(tx, id, patch, session.name));
-  return json({ player });
+  return json({ player: { ...player, photo: photoUrl(player) } });
 });

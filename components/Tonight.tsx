@@ -3,6 +3,7 @@
 import type { BracketPayload, EntryView, MatchView } from "@/lib/bracket/payload";
 import { feederLabel } from "@/lib/logic/derive";
 import { formatRemaining, matchClock } from "@/lib/timer";
+import { Avatar } from "./Avatar";
 import { SourceTag, StateChip, TableChip } from "./MatchCard";
 import { fmtRating, roundName } from "./client/format";
 
@@ -19,7 +20,7 @@ function Names({ m, big }: { m: MatchView; big?: boolean }) {
   const line = (e: EntryView, rating: number) => (
     <span className={`vs-name ${m.winner_id === e.entry_id ? "winner" : ""} ${m.state === "finished" && m.loser_id === e.entry_id ? "loser" : ""}`}>
       {m.winner_id === e.entry_id && <span className="tick">✔ </span>}
-      {e.name} <span className="muted">({fmtRating(rating)})</span> <SourceTag e={e} />
+      <Avatar name={e.name} photo={e.photo} size={big ? 28 : 20} /> {e.name} <span className="muted">({fmtRating(rating)})</span> <SourceTag e={e} />
     </span>
   );
   return (
@@ -191,7 +192,7 @@ export function TonightView({ b, now, query }: { b: BracketPayload; now: number;
             {waiting.map((a) => (
               <li key={a.entry.entry_id}>
                 <span>
-                  <strong>{a.entry.name}</strong> <SourceTag e={a.entry} />
+                  <Avatar name={a.entry.name} photo={a.entry.photo} /> <strong>{a.entry.name}</strong> <SourceTag e={a.entry} />
                 </span>
                 <span className="muted small">{a.round === 1 ? `${a.label} · next buy-back or late arrival` : `${a.label} · winner of ${feederLabel(c.bracket_size, a.slot, a.round)}`}</span>
               </li>
@@ -199,7 +200,7 @@ export function TonightView({ b, now, query }: { b: BracketPayload; now: number;
             {passes.map((fp) => (
               <li key={fp.id}>
                 <span>
-                  <strong>{fp.entry.name}</strong> <SourceTag e={fp.entry} />
+                  <Avatar name={fp.entry.name} photo={fp.entry.photo} /> <strong>{fp.entry.name}</strong> <SourceTag e={fp.entry} />
                 </span>
                 <span className="muted small">free pass to {roundName(fp.round + 1, c.rounds_total).toLowerCase()}</span>
               </li>
@@ -222,7 +223,7 @@ export function TonightView({ b, now, query }: { b: BracketPayload; now: number;
 }
 
 /** The club list as searchable rows with a labelled handicap column (spec 3.8). */
-export function PlayersTable({ players, query, setQuery }: { players: Array<{ id: string; name: string; rating: number }>; query: string; setQuery: (q: string) => void }) {
+export function PlayersTable({ players, query, setQuery }: { players: Array<{ id: string; name: string; rating: number; photo: string | null }>; query: string; setQuery: (q: string) => void }) {
   const q = norm(query);
   const rows = players.filter((p) => q === "" || norm(p.name).includes(q));
   return (
@@ -239,7 +240,9 @@ export function PlayersTable({ players, query, setQuery }: { players: Array<{ id
         <tbody>
           {rows.map((p) => (
             <tr key={p.id}>
-              <td>{p.name}</td>
+              <td>
+                <Avatar name={p.name} photo={p.photo} size={24} /> {p.name}
+              </td>
               <td className="num">{fmtRating(p.rating)}</td>
             </tr>
           ))}

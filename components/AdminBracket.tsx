@@ -385,7 +385,7 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
               </h2>
               <Btn className="sm" onClick={() => setDialog(null)}>Close</Btn>
             </div>
-            <MatchCard m={selected} now={now} actions={actions} />
+            <MatchCard m={selected} now={now} actions={actions} large />
           </div>
         </div>
       )}

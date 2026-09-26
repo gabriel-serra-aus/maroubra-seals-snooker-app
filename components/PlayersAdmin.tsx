@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Avatar } from "./Avatar";
 import { Btn } from "./Btn";
-import { get, patch, post } from "./client/api";
+import { del, get, patch, post, put } from "./client/api";
 import { fmtDate, fmtRating } from "./client/format";
 import { useAction } from "./client/hooks";
 
@@ -11,6 +12,7 @@ export interface ClubPlayer {
   name: string;
   rating: number;
   active: boolean;
+  photo: string | null;
 }
 
 interface HistoryRow {
@@ -36,7 +38,7 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
   const Row = ({ p }: { p: ClubPlayer }) => (
     <tr>
       <td>
-        {p.name}
+        <Avatar name={p.name} photo={p.photo} size={28} /> {p.name}
         {!p.active && <span className="muted"> (inactive)</span>}
       </td>
       <td className="num">{fmtRating(p.rating)}</td>
@@ -74,13 +76,85 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
         </tbody>
       </table>
       <p className="muted small">Lower is better and ratings can go below zero. Changing a rating never changes a match already drawn tonight.</p>
-      {editing && <EditSheet p={editing} signedInAs={signedInAs} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await reload(); }} />}
+      {editing && (
+        <EditSheet
+          p={editing}
+          signedInAs={signedInAs}
+          onClose={() => setEditing(null)}
+          onSaved={async () => { setEditing(null); await reload(); }}
+          onPhoto={(updated) => { setEditing(updated); setPlayers((all) => all.map((x) => (x.id === updated.id ? updated : x))); }}
+        />
+      )}
       {adding && <AddSheet onClose={() => setAdding(false)} onSaved={async () => { setAdding(false); await reload(); }} />}
     </main>
   );
 }
 
-function EditSheet({ p, signedInAs, onClose, onSaved }: { p: ClubPlayer; signedInAs: string; onClose: () => void; onSaved: () => Promise<void> }) {
+/**
+ * Shrinks a photo on the phone before it is sent (O-18): the centre square, 320 pixels across, as a JPEG.
+ * A phone camera's 4 MB becomes about 25 KB, so the upload is quick and the database stays small.
+ */
+async function squarePhoto(file: File): Promise<Blob> {
+  const img = await createImageBitmap(file);
+  const side = Math.min(img.width, img.height);
+  const out = 320;
+  const canvas = document.createElement("canvas");
+  canvas.width = out;
+  canvas.height = out;
+  const g = canvas.getContext("2d");
+  if (!g) throw new Error("This browser cannot resize photos");
+  g.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, out, out);
+  img.close();
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+  if (!blob) throw new Error("Could not read that photo");
+  return blob;
+}
+
+/** The player's photo on the edit card: take or choose one, or remove it (spec 3.2, O-18). Saved at once. */
+function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const { busy, error, run, isPending } = useAction();
+  const upload = (file: File) =>
+    run(async () => {
+      const r = await put<{ player: ClubPlayer }>(`/api/admin/players/${p.id}/photo`, await squarePhoto(file));
+      onPhoto(r.player);
+    }, "upload");
+  const remove = () =>
+    run(async () => {
+      const r = await del<{ player: ClubPlayer }>(`/api/admin/players/${p.id}/photo`);
+      onPhoto(r.player);
+    }, "remove");
+  return (
+    <div className="field photo-field">
+      <span className="muted small">Photo</span>
+      <div className="row">
+        <Avatar name={p.name} photo={p.photo} size={72} />
+        <input
+          ref={input}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void upload(file);
+          }}
+        />
+        <Btn className="sm" disabled={busy} pending={isPending("upload")} onClick={() => input.current?.click()}>
+          {p.photo ? "Change photo" : "Take / choose photo"}
+        </Btn>
+        {p.photo && (
+          <Btn className="sm danger" disabled={busy} pending={isPending("remove")} onClick={remove}>
+            Remove photo
+          </Btn>
+        )}
+      </div>
+      {error && <div className="error">{error}</div>}
+    </div>
+  );
+}
+
+function EditSheet({ p, signedInAs, onClose, onSaved, onPhoto }: { p: ClubPlayer; signedInAs: string; onClose: () => void; onSaved: () => Promise<void>; onPhoto: (p: ClubPlayer) => void }) {
   const [rating, setRating] = useState(String(p.rating));
   const [reason, setReason] = useState("");
   const [active, setActive] = useState(p.active);
@@ -100,6 +174,7 @@ function EditSheet({ p, signedInAs, onClose, onSaved }: { p: ClubPlayer; signedI
     <div className="sheet-backdrop" onClick={busy ? undefined : onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <h2>{p.name}</h2>
+        <PhotoField p={p} onPhoto={onPhoto} />
         <label className="field">
           <span>Rating</span>
           <input type="number" value={rating} onChange={(e) => setRating(e.target.value)} />

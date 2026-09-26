@@ -2,6 +2,7 @@
 
 import type { BracketPayload, EntryView, RoundView } from "@/lib/bracket/payload";
 import { feederLabel } from "@/lib/logic/derive";
+import { Avatar } from "./Avatar";
 import { matchInvolves } from "./Tonight";
 import { fmtRating, roundName } from "./client/format";
 import { MatchCard, SourceTag, type MatchActions } from "./MatchCard";
@@ -9,7 +10,7 @@ import { MatchCard, SourceTag, type MatchActions } from "./MatchCard";
 export function EntryName({ e }: { e: EntryView }) {
   return (
     <span>
-      {e.name} <span className="muted">({fmtRating(e.rating)})</span> <SourceTag e={e} />
+      <Avatar name={e.name} photo={e.photo} /> {e.name} <span className="muted">({fmtRating(e.rating)})</span> <SourceTag e={e} />
     </span>
   );
 }

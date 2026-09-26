@@ -1,11 +1,12 @@
 "use client";
 
-/** fetch wrapper for the admin API: JSON in, JSON out, throws the server's error message. */
+/** fetch wrapper for the admin API: JSON (or a Blob, sent as-is: a photo) in, JSON out, throws the server's error message. */
 export async function call<T = Record<string, unknown>>(method: string, path: string, body?: unknown): Promise<T> {
+  const blob = body instanceof Blob;
   const res = await fetch(path, {
     method,
-    headers: body !== undefined ? { "content-type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    headers: body !== undefined ? { "content-type": blob ? body.type : "application/json" } : undefined,
+    body: body !== undefined ? (blob ? body : JSON.stringify(body)) : undefined,
     credentials: "same-origin",
     cache: "no-store",
   });
@@ -23,4 +24,5 @@ export async function call<T = Record<string, unknown>>(method: string, path: st
 export const post = <T = Record<string, unknown>>(path: string, body?: unknown) => call<T>("POST", path, body ?? {});
 export const patch = <T = Record<string, unknown>>(path: string, body?: unknown) => call<T>("PATCH", path, body ?? {});
 export const del = <T = Record<string, unknown>>(path: string, body?: unknown) => call<T>("DELETE", path, body ?? {});
+export const put = <T = Record<string, unknown>>(path: string, body: unknown) => call<T>("PUT", path, body);
 export const get = <T = Record<string, unknown>>(path: string) => call<T>("GET", path);

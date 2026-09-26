@@ -9,6 +9,8 @@ export interface PlayerRecord {
   rating: number;
   active: boolean;
   deactivated_at: Date | null;
+  /** When the photo last changed, or null without one: the version its URL carries (spec 6.6, O-18). */
+  photo_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -90,4 +92,34 @@ export async function ratingHistory(q: Queryable, playerId: string): Promise<Rat
     "select id::text as id, player_id, competition_id, old_rating, new_rating, changed_by, reason, changed_at from rating_changes where player_id = $1 order by changed_at desc, id desc",
     [playerId],
   );
+}
+
+// ---- Photos (spec 6.6, O-18) ----
+
+export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+export type PhotoType = (typeof PHOTO_TYPES)[number];
+export const PHOTO_MAX_BYTES = 300_000;
+
+/** Replaces a player's photo. The caller has checked the type and size against the bytes. */
+export async function setPlayerPhoto(q: Queryable, id: string, mime: PhotoType, bytes: Uint8Array): Promise<PlayerRecord> {
+  await getPlayer(q, id);
+  await q.query(
+    `insert into player_photos (player_id, mime, bytes, updated_at) values ($1, $2, $3, now())
+     on conflict (player_id) do update set mime = excluded.mime, bytes = excluded.bytes, updated_at = now()`,
+    [id, mime, bytes],
+  );
+  await q.query("update players set photo_at = clock_timestamp() where id = $1", [id]);
+  return getPlayer(q, id);
+}
+
+export async function clearPlayerPhoto(q: Queryable, id: string): Promise<PlayerRecord> {
+  await getPlayer(q, id);
+  await q.query("delete from player_photos where player_id = $1", [id]);
+  await q.query("update players set photo_at = null where id = $1", [id]);
+  return getPlayer(q, id);
+}
+
+export async function getPlayerPhoto(q: Queryable, id: string): Promise<{ mime: PhotoType; bytes: Uint8Array } | null> {
+  const rows = await q.query<{ mime: PhotoType; bytes: Uint8Array }>("select mime, bytes from player_photos where player_id = $1", [id]);
+  return rows[0] ?? null;
 }

@@ -1789,3 +1789,61 @@ td.down {
   padding: 12px;
   color: var(--muted);
 }
+
+/* Player photos (spec 6.6, O-18): a round face beside the name, or initials on the player's own colour. */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  vertical-align: middle;
+  background: var(--line);
+}
+
+.avatar.initials {
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.tree-initials {
+  fill: #fff;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+/* The two faces at the top of a match opened in a popup. */
+.faces {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 8px 0 12px;
+}
+
+.face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 45%;
+  text-align: center;
+}
+
+.face-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.face.winner .avatar {
+  box-shadow: 0 0 0 3px var(--green);
+}
+
+.photo-field .row {
+  align-items: center;
+  flex-wrap: wrap;
+}

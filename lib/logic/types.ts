@@ -17,6 +17,8 @@ export interface PlayerRow {
   name: string;
   rating: number;
   active: boolean;
+  /** Version of the player's photo (spec 6.6); only the payload reads it. */
+  photo_at?: Date | null;
 }
 
 export interface CompetitionRow {

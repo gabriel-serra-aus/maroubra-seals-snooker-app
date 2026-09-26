@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useState } from "react";
 import { bracketIsStale, type BracketPayload } from "@/lib/bracket/payload";
 import { BracketTree } from "./BracketTree";
+import { Btn } from "./Btn";
+import { MatchCard } from "./MatchCard";
 import { TableStrip } from "./Tables";
 import { PlayerFinder, PlayersTable, TonightView } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 import { roundName } from "./client/format";
 import { usePoll, useServerClock, useStoredChoice, useWideScreen } from "./client/hooks";
 
-type PlayerList = { players: Array<{ id: string; name: string; rating: number }> };
+type PlayerList = { players: Array<{ id: string; name: string; rating: number; photo: string | null }> };
 type Tab = "tonight" | "players";
 
 const ICONS: Record<Tab, string> = {
@@ -41,7 +43,10 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
   const [view, setView] = useStoredChoice<BracketViewMode>("bracket-view", wide ? "tree" : "list", "list");
   const [tab, setTab] = useState<Tab>("tonight");
   const [query, setQuery] = useState("");
+  // The match a tree box opened: read from the live bracket so the popup follows its clock and result.
+  const [openMatch, setOpenMatch] = useState<string | null>(null);
   const c = b.competition;
+  const selected = b.rounds.flatMap((r) => r.matches).find((m) => m.id === openMatch);
   const liveCount = b.rounds.flatMap((r) => r.matches).filter((m) => m.state === "in_play").length;
 
   const tabs = (
@@ -112,7 +117,7 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
                         {c.winner ? <strong>Winner: {c.winner.name}</strong> : <strong>Night ended early — no winner this week.</strong>}
                       </div>
                     )}
-                    <BracketTree b={b} now={now} />
+                    <BracketTree b={b} now={now} onSelect={(m) => setOpenMatch(m.id)} />
                   </>
                 ) : (
                   <TonightView b={b} now={now} query={query} />
@@ -144,6 +149,18 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
         )}
       </main>
       <div className="bottom-tabs">{tabs}</div>
+      {selected && (
+        // A tapped box opens the match with both players' faces large (spec 3.8, O-18). Read only.
+        <div className="sheet-backdrop" onClick={() => setOpenMatch(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="row between">
+              <h2 style={{ margin: 0, border: 0 }}>{selected.label}</h2>
+              <Btn className="sm" onClick={() => setOpenMatch(null)}>Close</Btn>
+            </div>
+            <MatchCard m={selected} now={now} large />
+          </div>
+        </div>
+      )}
     </>
   );
 }

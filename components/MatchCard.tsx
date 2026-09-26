@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { EntryView, MatchView } from "@/lib/bracket/payload";
 import { formatRemaining, matchClock } from "@/lib/timer";
+import { Avatar } from "./Avatar";
 import { Btn, Spinner } from "./Btn";
 import { DECISION_LABEL, STATE_LABEL, fmtRating, fmtTime } from "./client/format";
 
@@ -74,7 +75,7 @@ export function PlayerLine({ e, m, className }: { e: EntryView; m: MatchView; cl
   return (
     <div className={`player ${className ?? ""} ${m.winner_id === e.entry_id ? "winner" : ""} ${isLoser ? "loser" : ""}`}>
       <span>
-        <span className="name">{e.name}</span> <span className="muted">({fmtRating(e.entry_id === m.a.entry_id ? m.rating_a : m.rating_b)})</span> <SourceTag e={e} />
+        <Avatar name={e.name} photo={e.photo} /> <span className="name">{e.name}</span> <span className="muted">({fmtRating(e.entry_id === m.a.entry_id ? m.rating_a : m.rating_b)})</span> <SourceTag e={e} />
       </span>
       <span className="muted facts">
         {/* The handicap start sits on the weaker player's own line, so the number is read with the name (rules §6, spec 5.6). */}
@@ -97,7 +98,24 @@ export function StartNote({ m }: { m: MatchView }) {
   );
 }
 
-export function MatchCard({ m, now, actions, expandable }: { m: MatchView; now: number; actions?: MatchActions; expandable?: boolean }) {
+/** The two players' faces, large, side by side: the top of a match opened in a popup (O-18). */
+function Faces({ m }: { m: MatchView }) {
+  const face = (e: EntryView) => (
+    <div className={`face ${m.winner_id === e.entry_id ? "winner" : ""}`}>
+      <Avatar name={e.name} photo={e.photo} size={88} />
+      <span className="face-name">{e.name}</span>
+    </div>
+  );
+  return (
+    <div className="faces">
+      {face(m.a)}
+      <span className="vs-mark">vs</span>
+      {face(m.b)}
+    </div>
+  );
+}
+
+export function MatchCard({ m, now, actions, expandable, large }: { m: MatchView; now: number; actions?: MatchActions; expandable?: boolean; large?: boolean }) {
   const [open, setOpen] = useState(false);
   const clock = m.state === "in_play" ? matchClock(m.started_at, m.time_limit_minutes, now) : null;
   const timedOut = clock?.timed_out ?? false;
@@ -135,6 +153,7 @@ export function MatchCard({ m, now, actions, expandable }: { m: MatchView; now: 
           {m.state === "finished" && m.corrected_at && <span className="muted small">corrected</span>}
         </span>
       </div>
+      {large && <Faces m={m} />}
       <PlayerLine e={m.a} m={m} />
       <PlayerLine e={m.b} m={m} />
       <StartNote m={m} />

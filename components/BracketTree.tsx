@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { BoxView, BracketPayload, EntryView, MatchView } from "@/lib/bracket/payload";
 import { boxLabel, feederLabel } from "@/lib/logic/derive";
 import { formatRemaining, matchClock } from "@/lib/timer";
+import { AvatarSvg } from "./Avatar";
 import { fmtRating } from "./client/format";
 import type { MatchActions } from "./MatchCard";
 
@@ -32,15 +33,19 @@ function boxY(g: Geo, round: number, k: number): number {
 }
 
 function Line({ e, y, x, muted, winner, loser, rating, start }: { e: EntryView; y: number; x: number; muted?: boolean; winner?: boolean; loser?: boolean; rating?: number; start?: number }) {
+  // A small face before the name (O-18); the name is cut a little shorter to make room.
   return (
-    <text x={x} y={y} className={`tree-name ${muted ? "muted" : ""} ${winner ? "winner" : ""} ${loser ? "loser" : ""}`}>
-      {winner ? "✔ " : ""}
-      {cut(e.name, start ? 13 : 18)} <tspan className="tree-rating">({fmtRating(rating ?? e.rating)})</tspan>
-      {/* The handicap start, beside the weaker player who receives it (rules §6, spec 5.6). */}
-      {start ? <tspan className="tree-start"> +{start}</tspan> : null}
-      {e.source === "buyback" && <tspan className="tree-tag"> bb</tspan>}
-      {e.source === "late" && <tspan className="tree-tag late"> la</tspan>}
-    </text>
+    <g>
+      <AvatarSvg name={e.name} photo={e.photo} cx={x + 7} cy={y - 4} r={7} />
+      <text x={x + 18} y={y} className={`tree-name ${muted ? "muted" : ""} ${winner ? "winner" : ""} ${loser ? "loser" : ""}`}>
+        {winner ? "✔ " : ""}
+        {cut(e.name, start ? 11 : 16)} <tspan className="tree-rating">({fmtRating(rating ?? e.rating)})</tspan>
+        {/* The handicap start, beside the weaker player who receives it (rules §6, spec 5.6). */}
+        {start ? <tspan className="tree-start"> +{start}</tspan> : null}
+        {e.source === "buyback" && <tspan className="tree-tag"> bb</tspan>}
+        {e.source === "late" && <tspan className="tree-tag late"> la</tspan>}
+      </text>
+    </g>
   );
 }
 

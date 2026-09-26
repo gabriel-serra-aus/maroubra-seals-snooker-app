@@ -50,7 +50,7 @@ export async function loadSnapshot(q: Queryable, competition: CompetitionRow, ex
     q.query<MatchRow>("select * from matches where competition_id = $1 order by round, number", [id]),
     q.query<FreePassRow>("select * from free_passes where competition_id = $1 order by from_round, granted_at", [id]),
     q.query<PlayerRow>(
-      `select id, name, rating, active from players
+      `select id, name, rating, active, photo_at from players
        where id in (select player_id from entries where competition_id = $1) or id = any($2::uuid[])
        order by name`,
       [id, extraPlayerIds],

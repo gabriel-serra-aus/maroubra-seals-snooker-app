@@ -7,6 +7,8 @@ import * as publicPlayers from "@/app/api/public/players/route";
 import * as players from "@/app/api/admin/players/route";
 import * as playerById from "@/app/api/admin/players/[id]/route";
 import * as ratingHistory from "@/app/api/admin/players/[id]/rating-history/route";
+import * as playerPhoto from "@/app/api/admin/players/[id]/photo/route";
+import * as publicPhoto from "@/app/api/public/players/[id]/photo/route";
 import * as competitions from "@/app/api/admin/competitions/route";
 import * as competitionById from "@/app/api/admin/competitions/[id]/route";
 import * as entries from "@/app/api/admin/competitions/[id]/entries/route";
@@ -72,6 +74,15 @@ export async function loginAs(code: string): Promise<Reply> {
   return r;
 }
 
+/** Sends raw bytes (a photo) to a handler; the reply body is JSON for errors and PUT, bytes for the public GET. */
+export async function sendBytes(handler: Handler, method: string, path: string, params: Record<string, string>, bytes?: Uint8Array, type?: string, auth = true) {
+  const headers: Record<string, string> = {};
+  if (auth && cookie) headers.cookie = cookie;
+  if (type) headers["content-type"] = type;
+  const res = await handler(new Request(`http://test.local${path}`, { method, headers, body: bytes ? new Blob([new Uint8Array(bytes)]) : undefined }), { params: Promise.resolve(params) });
+  return { status: res.status, headers: res.headers, bytes: new Uint8Array(await res.arrayBuffer()) };
+}
+
 export const api = {
   logout: () => call(logout.POST, "POST", "/api/admin/logout"),
   ping: (secret: string) =>
@@ -79,11 +90,14 @@ export const api = {
   bracket: (competition?: string) =>
     call<BracketPayload>(adminBracket.GET, "GET", `/api/admin/bracket${competition ? `?competition=${competition}` : ""}`),
   publicBracket: () => call<BracketPayload>(publicBracket.GET, "GET", "/api/public/bracket", { auth: false }),
-  publicPlayers: () => call<{ players: Array<{ id: string; name: string; rating: number }> }>(publicPlayers.GET, "GET", "/api/public/players", { auth: false }),
+  publicPlayers: () => call<{ players: Array<{ id: string; name: string; rating: number; photo: string | null }> }>(publicPlayers.GET, "GET", "/api/public/players", { auth: false }),
   players: (includeInactive = false) =>
     call<{ players: Array<{ id: string; name: string; rating: number; active: boolean }> }>(players.GET, "GET", `/api/admin/players${includeInactive ? "?include_inactive=1" : ""}`),
   createPlayer: (name: string, rating: number) => call<{ player: { id: string; name: string; rating: number } }>(players.POST, "POST", "/api/admin/players", { body: { name, rating } }),
   patchPlayer: (id: string, body: unknown) => call<{ player: { id: string; rating: number; active: boolean } }>(playerById.PATCH, "PATCH", `/api/admin/players/${id}`, { body, params: { id } }),
+  putPhoto: (id: string, bytes: Uint8Array, type: string, auth = true) => sendBytes(playerPhoto.PUT, "PUT", `/api/admin/players/${id}/photo`, { id }, bytes, type, auth),
+  deletePhoto: (id: string) => call<{ player: { photo: string | null } }>(playerPhoto.DELETE, "DELETE", `/api/admin/players/${id}/photo`, { params: { id } }),
+  publicPhoto: (id: string) => sendBytes(publicPhoto.GET, "GET", `/api/public/players/${id}/photo`, { id }, undefined, undefined, false),
   ratingHistory: (id: string) => call<{ history: Array<{ old_rating: number | null; new_rating: number; changed_by: string }> }>(ratingHistory.GET, "GET", `/api/admin/players/${id}/rating-history`, { params: { id } }),
   competitions: () => call<{ competitions: Array<{ id: string; status: string; rating_top_count: number }> }>(competitions.GET, "GET", "/api/admin/competitions"),
   createCompetition: (body: unknown = {}) =>
