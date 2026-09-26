@@ -38,7 +38,7 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
   const Row = ({ p }: { p: ClubPlayer }) => (
     <tr>
       <td>
-        <Avatar name={p.name} photo={p.photo} size={28} /> {p.name}
+        <Avatar name={p.name} photo={p.photo} size={36} /> {p.name}
         {!p.active && <span className="muted"> (inactive)</span>}
       </td>
       <td className="num">{fmtRating(p.rating)}</td>
@@ -128,7 +128,7 @@ function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) =>
     <div className="field photo-field">
       <span className="muted small">Photo</span>
       <div className="row">
-        <Avatar name={p.name} photo={p.photo} size={72} />
+        <Avatar name={p.name} photo={p.photo} size={94} />
         <input
           ref={input}
           type="file"

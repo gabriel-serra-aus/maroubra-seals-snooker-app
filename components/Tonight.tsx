@@ -20,7 +20,7 @@ function Names({ m, big }: { m: MatchView; big?: boolean }) {
   const line = (e: EntryView, rating: number) => (
     <span className={`vs-name ${m.winner_id === e.entry_id ? "winner" : ""} ${m.state === "finished" && m.loser_id === e.entry_id ? "loser" : ""}`}>
       {m.winner_id === e.entry_id && <span className="tick">✔ </span>}
-      <Avatar name={e.name} photo={e.photo} size={big ? 28 : 20} /> {e.name} <span className="muted">({fmtRating(rating)})</span> <SourceTag e={e} />
+      <Avatar name={e.name} photo={e.photo} size={big ? 36 : 26} /> {e.name} <span className="muted">({fmtRating(rating)})</span> <SourceTag e={e} />
     </span>
   );
   return (
@@ -241,7 +241,7 @@ export function PlayersTable({ players, query, setQuery }: { players: Array<{ id
           {rows.map((p) => (
             <tr key={p.id}>
               <td>
-                <Avatar name={p.name} photo={p.photo} size={24} /> {p.name}
+                <Avatar name={p.name} photo={p.photo} size={31} /> {p.name}
               </td>
               <td className="num">{fmtRating(p.rating)}</td>
             </tr>

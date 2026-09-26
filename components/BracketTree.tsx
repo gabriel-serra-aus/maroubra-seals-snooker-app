@@ -20,7 +20,7 @@ interface Geo {
   pitch: number;
 }
 const geometry = (withButtons: boolean): Geo => {
-  const boxH = withButtons ? 84 : 54;
+  const boxH = withButtons ? 90 : 60;
   return { boxH, pitch: boxH + 12 };
 };
 
@@ -36,10 +36,10 @@ function Line({ e, y, x, muted, winner, loser, rating, start }: { e: EntryView; 
   // A small face before the name (O-18); the name is cut a little shorter to make room.
   return (
     <g>
-      <AvatarSvg name={e.name} photo={e.photo} cx={x + 7} cy={y - 4} r={7} />
-      <text x={x + 18} y={y} className={`tree-name ${muted ? "muted" : ""} ${winner ? "winner" : ""} ${loser ? "loser" : ""}`}>
+      <AvatarSvg name={e.name} photo={e.photo} cx={x + 9} cy={y - 4} r={9} />
+      <text x={x + 22} y={y} className={`tree-name ${muted ? "muted" : ""} ${winner ? "winner" : ""} ${loser ? "loser" : ""}`}>
         {winner ? "✔ " : ""}
-        {cut(e.name, start ? 11 : 16)} <tspan className="tree-rating">({fmtRating(rating ?? e.rating)})</tspan>
+        {cut(e.name, start ? 10 : 15)} <tspan className="tree-rating">({fmtRating(rating ?? e.rating)})</tspan>
         {/* The handicap start, beside the weaker player who receives it (rules §6, spec 5.6). */}
         {start ? <tspan className="tree-start"> +{start}</tspan> : null}
         {e.source === "buyback" && <tspan className="tree-tag"> bb</tspan>}
@@ -145,7 +145,7 @@ function Seat({ seat, m, x, y, top, move, onPointerDown }: { seat: SeatInfo; m: 
   const cls = ["tree-seat", seat.movable ? "movable" : "", seat.open ? "open" : "", selected ? "selected" : "", target ? "target" : "", over ? "over" : ""].join(" ");
   return (
     <g className={cls} data-slot={seat.slot} data-open={seat.open ? "1" : undefined} onClick={click} onPointerDown={seat.entry && seat.movable ? (e) => onPointerDown(e, seat.entry!) : undefined}>
-      <rect x={x + 6} y={top} width={BOX_W - 12} height={17} rx={3} className="seat-bg" />
+      <rect x={x + 6} y={top} width={BOX_W - 12} height={20} rx={3} className="seat-bg" />
       {seat.entry ? (
         <Line e={seat.entry} x={x + 12} y={y} rating={m ? (m.a.entry_id === seat.entry.entry_id ? m.rating_a : m.rating_b) : undefined} start={m && m.start_entry_id === seat.entry.entry_id ? m.start_points : 0} />
       ) : (
@@ -195,33 +195,33 @@ function Box({ b, g, x, y, now, round, bracketSize, onSelect, actions, move }: {
       </text>
       {seated ? (
         <>
-          <Seat seat={seated[0]} m={m} x={x} y={top + 26} top={top + 14} move={move!} onPointerDown={move!.onPointerDown} />
-          <Seat seat={seated[1]} m={m} x={x} y={top + 43} top={top + 31} move={move!} onPointerDown={move!.onPointerDown} />
+          <Seat seat={seated[0]} m={m} x={x} y={top + 28} top={top + 16} move={move!} onPointerDown={move!.onPointerDown} />
+          <Seat seat={seated[1]} m={m} x={x} y={top + 49} top={top + 37} move={move!} onPointerDown={move!.onPointerDown} />
         </>
       ) : m ? (
         <>
-          <Line e={m.a} x={x + 12} y={top + 26} winner={m.winner_id === m.a.entry_id} loser={m.state === "finished" && m.winner_id !== m.a.entry_id} rating={m.rating_a} start={m.start_entry_id === m.a.entry_id ? m.start_points : 0} />
-          <Line e={m.b} x={x + 12} y={top + 43} winner={m.winner_id === m.b.entry_id} loser={m.state === "finished" && m.winner_id !== m.b.entry_id} rating={m.rating_b} start={m.start_entry_id === m.b.entry_id ? m.start_points : 0} />
-          {actions && <BoxButton m={m} x={x + 12} y={top + 51} actions={actions} />}
+          <Line e={m.a} x={x + 12} y={top + 28} winner={m.winner_id === m.a.entry_id} loser={m.state === "finished" && m.winner_id !== m.a.entry_id} rating={m.rating_a} start={m.start_entry_id === m.a.entry_id ? m.start_points : 0} />
+          <Line e={m.b} x={x + 12} y={top + 49} winner={m.winner_id === m.b.entry_id} loser={m.state === "finished" && m.winner_id !== m.b.entry_id} rating={m.rating_b} start={m.start_entry_id === m.b.entry_id ? m.start_points : 0} />
+          {actions && <BoxButton m={m} x={x + 12} y={top + 57} actions={actions} />}
           {actions && m.state === "finished" && !m.correction_blocked && (
-            <text x={x + 12} y={top + 64} className="tree-sub">
+            <text x={x + 12} y={top + 70} className="tree-sub">
               tap to review the result
             </text>
           )}
         </>
       ) : b.entry ? (
         <>
-          <Line e={b.entry} x={x + 12} y={top + 26} />
-          <text x={x + 12} y={top + 43} className="tree-sub">
+          <Line e={b.entry} x={x + 12} y={top + 28} />
+          <text x={x + 12} y={top + 49} className="tree-sub">
             {b.free_pass ? "free pass" : feeders && b.entry.slot !== null ? `awaiting winner of ${feederLabel(bracketSize, b.entry.slot, round)}` : "awaiting opponent"}
           </text>
         </>
       ) : feeders ? (
         <>
-          <text x={x + 12} y={top + 26} className="tree-sub">
+          <text x={x + 12} y={top + 28} className="tree-sub">
             winner of {feeders[0]}
           </text>
-          <text x={x + 12} y={top + 43} className="tree-sub">
+          <text x={x + 12} y={top + 49} className="tree-sub">
             winner of {feeders[1]}
           </text>
         </>

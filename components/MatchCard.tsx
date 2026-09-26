@@ -102,7 +102,7 @@ export function StartNote({ m }: { m: MatchView }) {
 function Faces({ m }: { m: MatchView }) {
   const face = (e: EntryView) => (
     <div className={`face ${m.winner_id === e.entry_id ? "winner" : ""}`}>
-      <Avatar name={e.name} photo={e.photo} size={88} />
+      <Avatar name={e.name} photo={e.photo} size={114} />
       <span className="face-name">{e.name}</span>
     </div>
   );

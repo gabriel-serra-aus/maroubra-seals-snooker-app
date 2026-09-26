@@ -17,7 +17,7 @@ import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 import { get, patch, post } from "./client/api";
 import { roundName } from "./client/format";
 import { useAction, usePoll, useServerClock, useStoredChoice, useWideScreen } from "./client/hooks";
-import { unlockSound, useSound, useTimeoutAlert } from "./client/sound";
+import { playAlarm, unlockSound, useSound, useTimeoutAlert } from "./client/sound";
 
 type Dialog = { kind: "complete" | "correct"; m: MatchView } | { kind: "match" | "table" | "move"; id: string } | { kind: "add" } | null;
 type ClubPlayer = { id: string; name: string; rating: number; active: boolean };
@@ -334,9 +334,21 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
             </Btn>
           )}
           {c.status === "in_progress" && (
-            // The "Match timed out" voice needs one tap on a phone (spec 3.6).
-            <Btn title={soundOn ? "Turn off the match timed out voice alert" : "Enable the match timed out voice alert"} onClick={toggleSound}>
+            // The time-up alarm needs one tap on a phone (spec 3.6).
+            <Btn title={soundOn ? "Turn off the time-up alarm" : "Turn on the time-up alarm"} onClick={toggleSound}>
               <SpeakerIcon muted={!soundOn} /> {soundOn ? "Sound on" : "Sound off"}
+            </Btn>
+          )}
+          {c.status === "in_progress" && (
+            // Plays the alarm once, so the organiser can check the phone's volume before the night (spec 3.6, O-19).
+            <Btn
+              title="Play the time-up alarm once"
+              onClick={() => {
+                unlockSound();
+                playAlarm();
+              }}
+            >
+              Test sound
             </Btn>
           )}
         </div>

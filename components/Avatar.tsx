@@ -21,7 +21,7 @@ function hue(name: string): number {
 }
 
 /** A round photo or initials, `size` pixels across, for HTML. */
-export function Avatar({ name, photo, size = 20, className }: { name: string; photo: string | null; size?: number; className?: string }) {
+export function Avatar({ name, photo, size = 26, className }: { name: string; photo: string | null; size?: number; className?: string }) {
   const style = { width: size, height: size, fontSize: Math.round(size * 0.42) };
   if (photo) {
     // Served by our own route with a year-long cache (spec 7.2): no image service, which would cost a

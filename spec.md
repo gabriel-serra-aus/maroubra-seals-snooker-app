@@ -281,7 +281,7 @@ The dialog asks for the winner, and for a round-one match where the loser has no
 
 ### 3.6 Match timer view
 
-**Removed.** The countdown on the match card (3.4, list and tree) is the clock; a separate full-screen timer was a screen nobody used. Everything it did lives on the card: the countdown is worked out from the server's stored start time and the match's limit, not a counter on the phone, so leaving the screen, refreshing, or locking the phone shows the correct remaining time (§12); at zero the app plays the voice alert **"Match timed out"** on any admin page and shows the warning (5.12); the match stays green until a result is entered. `/admin/match/{id}` no longer exists.
+**Removed.** The countdown on the match card (3.4, list and tree) is the clock; a separate full-screen timer was a screen nobody used. Everything it did lives on the card: the countdown is worked out from the server's stored start time and the match's limit, not a counter on the phone, so leaving the screen, refreshing, or locking the phone shows the correct remaining time (§12); at zero the app plays the **time-up alarm** — three bursts of three sharp beeps (O-19) — on any admin page and shows the warning (5.12); the match stays green until a result is entered. `/admin/match/{id}` no longer exists. Beside the admin bracket's **Sound on / Sound off** switch, **Test sound** plays the alarm once, whatever the switch shows, so the organiser can check the phone's volume before the first match.
 
 ### 3.7 End-of-night rating review
 
@@ -383,7 +383,7 @@ Red is not a match colour: it is reserved for errors and for buttons that cannot
 | --- | --- | --- | --- | --- |
 | `not_started` | `in_play` | **Start** | Match has two players; a free table chosen (5.14). | `started_at` set to now on the server. Time limit frozen for this match. `table_number` set to the chosen table. |
 | `in_play` | `not_started` | **Cancel start** (O-5) | Match is `in_play`. | `started_at`, frozen limit and `table_number` cleared. Audit row. No result is involved, so nothing else changes. |
-| `in_play` | `in_play` (timed out) | Clock reaches zero | — | Voice alert on the organiser's device; warning shown everywhere. No data change. |
+| `in_play` | `in_play` (timed out) | Clock reaches zero | — | Time-up alarm on the organiser's device (O-19); warning shown everywhere. No data change. |
 | `in_play` | `finished` | **Complete** | Winner chosen. Round one: loser's buy-back decision chosen (unless already bought back, window closed, or no open slot). | Winner recorded, `finished_at` set, winner advanced up the tree (5.4). Loser buys back (takes a slot, placed at once per 5.2) or is out. Window untouched (O-15). |
 | `finished` | `finished` (new result) | **Review result** | Previous winner's next match not started (§12), and the previous loser's buy-back match not started (O-6). | Previous winner removed from the next round; new winner advanced. Details in 5.7. |
 | any | `not_started` | Override **Reset** (O-5) | None. | Result, winner and clock cleared; next round unwound as far as it can be. Audit row. |
@@ -681,7 +681,7 @@ remaining      = max(0, ends_at − now)
 timed_out      = state == 'in_play' AND now ≥ ends_at
 ```
 
-The client reads `started_at` and the server's `now` in the same response and offsets its own clock by the difference, so a phone with a wrong clock still shows the right countdown. The alert fires when a client observes `timed_out` become true for a match it has not already alerted for (kept in memory per page load). The public page shows the warning but does not play the voice.
+The client reads `started_at` and the server's `now` in the same response and offsets its own clock by the difference, so a phone with a wrong clock still shows the right countdown. The alert fires when a client observes `timed_out` become true for a match it has not already alerted for (kept in memory per page load). The public page shows the warning but does not play the alarm.
 
 ### 5.13 Test coverage
 
@@ -1027,6 +1027,7 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 | O-16 | Nights that run out of time | **A night ended early counts as "completed (unfinished)".** The organiser taps **End night here**; the night becomes `complete` with **no winner**, keeps every result, appears in history and opens its rating review as usual. Abandon (O-7) stays what it is: a night that should not count at all. | 3.4, 3.8, 3.11, 5.9, 5.11, 7.4 |
 | O-17 | Moving a player on the override screen | **Round one, players who have not played, open seats only.** The override tree lets the organiser move a player waiting in round one, or in a not-started round-one match, to any open place — dragging with a mouse (the screen is mostly used on a computer) or clicking the player then the seat. Both confirm first. Later rounds follow from the round-one slot (O-14), so they are never moved directly. | 3.9, 5.10, 7.6 |
 | O-18 | Player photos | **Optional, public, stored in the database.** An organiser adds a photo on the Players edit sheet from the phone's camera or gallery; it is cropped square and shrunk on the phone. It shows small beside the name in the tree, the lists and the players tables, and large when a match is opened; initials stand in without one. Photos are visible on the public page, so add one only with the member's agreement. | 3.2, 3.8, 6.6, 7.2, 7.3 |
+| O-19 | The time-up sound | **A beeping alarm, not a voice.** Three bursts of three sharp beeps, made in the browser so there is no sound file to host. Easier to pick out across a noisy room than a spoken "Match timed out". **Test sound** beside the Sound switch plays it once. | 3.6, 4.1, 5.12 |
 
 ### 10.1 Still worth a word from the organiser
 

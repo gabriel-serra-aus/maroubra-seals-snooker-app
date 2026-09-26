@@ -7,6 +7,11 @@ import { useStoredChoice } from "./hooks";
 
 // Phones only allow sound after a tap (spec 3.6). Any tap on an admin page unlocks it; a fresh page load
 // with matches already running shows a one-time "Enable sound" prompt.
+//
+// The alert is a tone made in the browser (Web Audio), not a voice and not a sound file (O-19): three
+// bursts of three sharp beeps, loud and unlike anything else in a snooker room, so "time is up" is heard
+// from across the tables. Nothing to download, nothing to host.
+let ctx: AudioContext | null = null;
 let unlocked = false;
 const listeners = new Set<() => void>();
 
@@ -14,36 +19,62 @@ export function soundUnlocked() {
   return unlocked;
 }
 
+function audio(): AudioContext | null {
+  if (typeof window === "undefined" || !("AudioContext" in window)) return null;
+  ctx ??= new AudioContext();
+  return ctx;
+}
+
+/** Runs inside a tap: the only moment a phone lets a page start its audio. */
 export function unlockSound() {
+  const a = audio();
+  if (!a) return; // no Web Audio: the visual warning still shows
+  if (a.state === "suspended") void a.resume();
   if (unlocked) return;
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  try {
-    const u = new SpeechSynthesisUtterance("");
-    u.volume = 0;
-    window.speechSynthesis.speak(u);
-    unlocked = true;
-    listeners.forEach((l) => l());
-  } catch {
-    // no speech support — the visual warning still shows
+  // One silent sample played inside the tap is what iOS needs before it will play anything later.
+  const src = a.createBufferSource();
+  src.buffer = a.createBuffer(1, 1, a.sampleRate);
+  src.connect(a.destination);
+  src.start();
+  unlocked = true;
+  listeners.forEach((l) => l());
+}
+
+/** The time-up alarm (rules 5, spec 5.12, O-19): beep-beep-beep, three times, about two seconds in all. */
+export function playAlarm() {
+  const a = audio();
+  if (!a) return;
+  if (a.state === "suspended") void a.resume();
+  const t0 = a.currentTime + 0.05;
+  for (let burst = 0; burst < 3; burst++) {
+    for (let beep = 0; beep < 3; beep++) {
+      const start = t0 + burst * 0.75 + beep * 0.18;
+      const osc = a.createOscillator();
+      const gain = a.createGain();
+      osc.type = "square";
+      osc.frequency.value = 1320;
+      // A quick rise and fall on every beep, so it is sharp but never clicks.
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.35, start + 0.01);
+      gain.gain.setValueAtTime(0.35, start + 0.11);
+      gain.gain.linearRampToValueAtTime(0, start + 0.13);
+      osc.connect(gain).connect(a.destination);
+      osc.start(start);
+      osc.stop(start + 0.14);
+    }
   }
 }
 
-/** The voice alert (rules 12): "Match timed out". */
-export function speak(text: string) {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  try {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "en-AU";
-    u.rate = 0.95;
-    window.speechSynthesis.speak(u);
-  } catch {
-    // ignore
-  }
+/** Silences an alarm already playing: turning the sound off goes quiet at once. */
+function stopAlarm() {
+  if (!ctx) return;
+  void ctx.close();
+  ctx = null;
+  unlocked = false;
 }
 
 /**
- * The sound switch (spec 3.6). Two things have to be true for the voice to play: the browser has been
+ * The sound switch (spec 3.6). Two things have to be true for the alarm to play: the browser has been
  * unlocked by a tap, and the organiser has not turned the sound off. The off choice is remembered on the
  * device, and while it stands no tap re-enables it.
  */
@@ -66,8 +97,8 @@ export function useSound(): { on: boolean; toggle: () => void } {
   const on = wanted && state;
   const toggle = () => {
     if (on) {
-      // Turning it off mid-sentence should go quiet now, not after "Match timed out" finishes.
-      if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+      // Turning it off mid-alarm should go quiet now, not after the beeps finish.
+      stopAlarm();
       setPref("off");
     } else {
       setPref("on");
@@ -92,7 +123,7 @@ export function useTimeoutAlert(matches: MatchView[], now: number, enabled: bool
       const c = matchClock(m.started_at, m.time_limit_minutes, now);
       if (c?.timed_out && !alerted.current.has(m.id)) {
         alerted.current.add(m.id);
-        speak("Match timed out");
+        playAlarm();
       }
     }
   }, [matches, now, enabled]);
