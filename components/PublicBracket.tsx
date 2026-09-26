@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useState } from "react";
 import { bracketIsStale, type BracketPayload } from "@/lib/bracket/payload";
 import { BracketTree } from "./BracketTree";
-import { BracketView } from "./BracketView";
 import { TableStrip } from "./Tables";
 import { PlayerFinder, PlayersTable, TonightView } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
@@ -12,12 +11,11 @@ import { roundName } from "./client/format";
 import { usePoll, useServerClock, useStoredChoice, useWideScreen } from "./client/hooks";
 
 type PlayerList = { players: Array<{ id: string; name: string; rating: number }> };
-type Tab = "tonight" | "draw" | "players";
+type Tab = "tonight" | "players";
 
 const ICONS: Record<Tab, string> = {
-  // A clock face, a bracket, two people: line icons drawn in currentColor.
+  // A clock face and two people: line icons drawn in currentColor.
   tonight: "M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18Zm0 4v5l3 2",
-  draw: "M3 5h5v4H3zM3 15h5v4H3zM8 7h4v10H8M12 12h4M16 10h5v4h-5",
   players: "M8 11a3 3 0 1 0 0-6a3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6a3 3 0 0 0 0 6ZM2 20a6 6 0 0 1 12 0M12 20a5 5 0 0 1 10 0",
 };
 
@@ -30,9 +28,9 @@ function TabIcon({ kind }: { kind: Tab }) {
 }
 
 /**
- * The public page (spec 3.8): read only, refreshes itself every 10 seconds. Three tabs — Tonight (live
- * play first), Draw (the full bracket as a list or tree) and Players (the club list) — with the tab bar
- * along the bottom on a phone, where the thumb is.
+ * The public page (spec 3.8): read only, refreshes itself every 10 seconds. Two tabs — Tonight (live
+ * play as a list, or the whole bracket as a tree) and Players (the club list) — with the tab bar along
+ * the bottom on a phone, where the thumb is.
  */
 export function PublicBracket({ initial, initialPlayers }: { initial: BracketPayload; initialPlayers: PlayerList }) {
   const { data: b } = usePoll<BracketPayload>("/api/public/bracket", 10_000, initial, bracketIsStale);
@@ -44,21 +42,16 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
   const [tab, setTab] = useState<Tab>("tonight");
   const [query, setQuery] = useState("");
   const c = b.competition;
-  const shownTab: Tab = c ? tab : tab === "draw" ? "tonight" : tab;
   const liveCount = b.rounds.flatMap((r) => r.matches).filter((m) => m.state === "in_play").length;
 
   const tabs = (
     <nav className="tabs" aria-label="Sections">
-      <button type="button" className={shownTab === "tonight" ? "on" : ""} aria-current={shownTab === "tonight" ? "page" : undefined} onClick={() => setTab("tonight")}>
+      <button type="button" className={tab === "tonight" ? "on" : ""} aria-current={tab === "tonight" ? "page" : undefined} onClick={() => setTab("tonight")}>
         <TabIcon kind="tonight" />
         Tonight
         {liveCount > 0 && <span className="badge">{liveCount}</span>}
       </button>
-      <button type="button" className={shownTab === "draw" ? "on" : ""} disabled={!c} aria-current={shownTab === "draw" ? "page" : undefined} onClick={() => setTab("draw")}>
-        <TabIcon kind="draw" />
-        Draw
-      </button>
-      <button type="button" className={shownTab === "players" ? "on" : ""} aria-current={shownTab === "players" ? "page" : undefined} onClick={() => setTab("players")}>
+      <button type="button" className={tab === "players" ? "on" : ""} aria-current={tab === "players" ? "page" : undefined} onClick={() => setTab("players")}>
         <TabIcon kind="players" />
         Players
       </button>
@@ -86,7 +79,7 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
         </div>
       </header>
       <main className="public-main">
-        {shownTab === "tonight" && (
+        {tab === "tonight" && (
           <>
             <div className="page-head">
               <div>
@@ -106,9 +99,24 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
             </div>
             {c ? (
               <>
-                <PlayerFinder b={b} now={now} query={query} setQuery={setQuery} />
+                {/* Find my match with the List | Tree switch beside it, as on 3.4 (spec 3.8). */}
+                <div className="row actionbar-right" style={{ margin: "8px 0" }}>
+                  <PlayerFinder b={b} now={now} query={query} setQuery={setQuery} />
+                  <ViewToggle value={view} onChange={setView} />
+                </div>
                 {c.status === "in_progress" && <TableStrip b={b} now={now} />}
-                <TonightView b={b} now={now} query={query} />
+                {view === "tree" ? (
+                  <>
+                    {c.status === "complete" && (
+                      <div className="info">
+                        {c.winner ? <strong>Winner: {c.winner.name}</strong> : <strong>Night ended early — no winner this week.</strong>}
+                      </div>
+                    )}
+                    <BracketTree b={b} now={now} />
+                  </>
+                ) : (
+                  <TonightView b={b} now={now} query={query} />
+                )}
               </>
             ) : (
               <div className="card empty-night">
@@ -123,27 +131,7 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
             )}
           </>
         )}
-        {shownTab === "draw" && c && (
-          <>
-            <div className="page-head">
-              <div>
-                <h1>Draw</h1>
-                <p className="meta">
-                  {c.bracket_size}-slot bracket · {roundName(c.current_round, c.rounds_total)}
-                  {c.status === "in_progress" && c.buybacks_open && <> · {c.open_slots} open slot{c.open_slots === 1 ? "" : "s"}</>}
-                </p>
-              </div>
-              <ViewToggle value={view} onChange={setView} />
-            </div>
-            {c.status === "complete" && (
-              <div className="info">
-                {c.winner ? <strong>Winner: {c.winner.name}</strong> : <strong>Night ended early — no winner this week.</strong>}
-              </div>
-            )}
-            {view === "tree" ? <BracketTree b={b} now={now} /> : <BracketView b={b} now={now} expandable />}
-          </>
-        )}
-        {shownTab === "players" && (
+        {tab === "players" && (
           <>
             <div className="page-head">
               <div>
