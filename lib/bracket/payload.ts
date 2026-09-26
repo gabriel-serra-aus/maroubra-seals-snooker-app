@@ -19,6 +19,7 @@ import {
   type Position,
 } from "@/lib/logic/derive";
 import { correctionBlockedReason } from "@/lib/logic/matchControl";
+import { openPlaces } from "@/lib/logic/override";
 import type { BuybackDecision, EntrySource, MatchOrigin, MatchState, Snapshot } from "@/lib/logic/types";
 
 export interface EntryView {
@@ -111,6 +112,8 @@ export interface BracketPayload {
     current_round: number;
     buybacks_open: boolean;
     open_slots: number;
+    /** Empty round-one slots not under a decided box: where the override screen can move a player (spec 5.10, O-17). */
+    open_places: number[];
     winner: EntryView | null;
     /** Complete with no champion: the night was ended early on time (spec 5.11). */
     ended_early: boolean;
@@ -234,6 +237,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       current_round: currentRound(s),
       buybacks_open: buybacksOpen(s),
       open_slots: openSlots(s),
+      open_places: inProgress ? openPlaces(s) : [],
       winner: c.winner_entry_id ? view(c.winner_entry_id) : null,
       ended_early: c.status === "complete" && c.winner_entry_id === null,
     },

@@ -45,7 +45,7 @@ export function describeChanges(before: Snapshot, after: Snapshot): string[] {
   for (const e of before.entries) {
     const ne = after.entries.find((x) => x.id === e.id);
     if (!ne) out.push(`${nameIn(before, e.id)} removed from the night`);
-    else if (ne.slot !== e.slot && ne.slot !== null) out.push(`${nameIn(after, e.id)} placed in slot ${ne.slot}`);
+    else if (ne.slot !== e.slot && ne.slot !== null) out.push(`${nameIn(after, e.id)} ${e.slot !== null ? `moved from slot ${e.slot} to` : "placed in"} slot ${ne.slot}`);
   }
   for (const e of after.entries) {
     if (!before.entries.some((x) => x.id === e.id)) {

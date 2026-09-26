@@ -21,6 +21,7 @@ import * as adminActions from "@/app/api/admin/competitions/[id]/admin-actions/r
 import * as ovEntries from "@/app/api/admin/competitions/[id]/override/entries/route";
 import * as ovEntryById from "@/app/api/admin/competitions/[id]/override/entries/[entryId]/route";
 import * as ovPair from "@/app/api/admin/competitions/[id]/override/pair/route";
+import * as ovMove from "@/app/api/admin/competitions/[id]/override/move/route";
 import * as ovFreePass from "@/app/api/admin/competitions/[id]/override/free-pass/route";
 import * as ovFreePassById from "@/app/api/admin/competitions/[id]/override/free-pass/[fpId]/route";
 import * as ovReopen from "@/app/api/admin/competitions/[id]/override/reopen-buybacks/route";
@@ -113,6 +114,7 @@ export const api = {
     addPlayer: (id: string, body: unknown) => call<OverrideReply>(ovEntries.POST, "POST", `/api/admin/competitions/${id}/override/entries`, { body, params: { id } }),
     removeEntry: (id: string, entryId: string, body: unknown = {}) => call<OverrideReply>(ovEntryById.DELETE, "DELETE", `/api/admin/competitions/${id}/override/entries/${entryId}`, { body, params: { id, entryId } }),
     pair: (id: string, body: unknown) => call<OverrideReply>(ovPair.POST, "POST", `/api/admin/competitions/${id}/override/pair`, { body, params: { id } }),
+    move: (id: string, body: unknown) => call<OverrideReply>(ovMove.POST, "POST", `/api/admin/competitions/${id}/override/move`, { body, params: { id } }),
     freePass: (id: string, body: unknown) => call<OverrideReply>(ovFreePass.POST, "POST", `/api/admin/competitions/${id}/override/free-pass`, { body, params: { id } }),
     revokeFreePass: (id: string, fpId: string, body: unknown = {}) => call<OverrideReply>(ovFreePassById.DELETE, "DELETE", `/api/admin/competitions/${id}/override/free-pass/${fpId}`, { body, params: { id, fpId } }),
     reopen: (id: string, body: unknown = {}) => call<OverrideReply>(ovReopen.POST, "POST", `/api/admin/competitions/${id}/override/reopen-buybacks`, { body, params: { id } }),

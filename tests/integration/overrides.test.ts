@@ -255,3 +255,28 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     expect(log.map((a) => a.action)).toContain("abandon");
   });
 });
+
+describe("move a player who has not played (spec 7.6, O-17)", () => {
+  it("dry run lists the move without writing; the real move returns the bracket and is logged", async () => {
+    for (const c of (await api.competitions()).body.competitions) {
+      if (c.status === "setup" || c.status === "in_progress") await api.abandon(c.id);
+    }
+    const ids = await club(4, "Mover");
+    const { id, bracket } = await night(ids);
+    const m2 = find.match(bracket, 2);
+    expect(bracket.competition?.open_places).toEqual(Array.from({ length: 12 }, (_, i) => i + 5));
+    const dry = await api.ov.move(id, { entry_id: m2.a.entry_id, slot: 7, dry_run: true });
+    expect(dry.status).toBe(200);
+    expect(dry.body.changes).toEqual(expect.arrayContaining([expect.stringMatching(/R1M2 .* removed/), `${m2.a.name} moved from slot 3 to slot 7`]));
+    expect(find.match((await api.bracket(id)).body, 2).a.entry_id).toBe(m2.a.entry_id); // nothing written
+    const real = await api.ov.move(id, { entry_id: m2.a.entry_id, slot: 7 });
+    expect(real.status).toBe(200);
+    expect(find.matchesInRound(real.body.bracket, 1)).toHaveLength(1);
+    expect(real.body.bracket.entries.find((e) => e.entry_id === m2.a.entry_id)?.slot).toBe(7);
+    const log = (await api.adminActions(id)).body.actions;
+    expect(log[0]).toMatchObject({ actor: "Gabriel", action: "move_player", details: { player: m2.a.name, from: 3, to: 7, deleted: "R1M2" } });
+    const taken = await api.ov.move(id, { entry_id: m2.b.entry_id, slot: 1 });
+    expect(taken.status).toBe(409);
+    expect(taken.body.error).toMatch(/Slot 1 is taken/);
+  });
+});

@@ -316,7 +316,7 @@ With no competition the Tonight tab says nothing is running and that the draw ap
 
 The escape hatch (O-5). Everything the normal screens refuse is possible here, on the organiser's word. It exists because a club night goes wrong in ways no specification predicts: the wrong name was ticked, two players swapped tables, someone went home, a result was entered against the wrong match an hour ago.
 
-Shows every player in tonight's competition with their position, every match with its state, every free pass, the night-level switches, and the audit log of overrides already made tonight. Each action shows a plain-English confirmation naming every consequence before it runs, and writes an `admin_actions` row with the signed-in organiser's name (O-8).
+Shows every player in tonight's competition with their position, every match with its state, every free pass, the night-level switches, and the audit log of overrides already made tonight. The matches show as the fixed tree or as a list, with the same List | Tree switch as 3.4; a match box in the tree opens that match's override card. In the tree each round-one box not yet under way is drawn seat by seat, so a player who has not played can be moved to an open seat (O-17). Each action shows a plain-English confirmation naming every consequence before it runs, and writes an `admin_actions` row with the signed-in organiser's name (O-8).
 
 | Action | What happens |
 | --- | --- |
@@ -326,6 +326,7 @@ Shows every player in tonight's competition with their position, every match wit
 | Reset a match | Back to `not_started`: clears the result, winner and clock, and pulls the winner out of the next round if that round has not started. Like Cancel start (O-5) but it also works on a finished match. |
 | Delete a match | Removes the match; both players return to waiting in that round. |
 | Pair two waiting players | Creates a match between any two chosen waiting players, without the §10 randomness. |
+| Move a player (round one) | Moves a player who has not played to an open seat of round one (O-17): drag them onto the seat with a mouse, or click them and then the seat. Either way the confirmation lists the consequences first. |
 | Grant / revoke a free pass | Moves a player into the next round without playing, or takes that back. |
 | Reopen buy-backs | Clears `buybacks_closed_at` and returns round one to open. The one place §3's "no more entries for the night" can be undone. |
 | Grow bracket 16 → 32 | Adds slots 17–32 as open slots. Existing slots, matches and results untouched. It cannot shrink. |
@@ -636,6 +637,7 @@ The override actions in 3.9 are the same pure functions the normal routes use, c
 | Remove a player | 5.7 | Their not-started matches are deleted and finished matches they **won** are voided, unwinding the winner's later place; a finished match they **lost** stays as history. Refuses, naming the match, if one of theirs is in play or a later match has started. The automatic step then runs. |
 | Pair two waiting players | 5.5 | No randomness. In round one any two waiting players; from round two both must be waiting in the **same box** (409 otherwise). |
 | Add a player to the night | 5.2 | Ignores `open_slots`, `buybacks_closed_at` and the one-buy-back rule. Takes an **open place** — an empty round-one slot not under a box already decided — chosen by the 5.2 placement rule: an empty match first, then a seat beside a lone waiting player (O-13), and the lowest open place only when neither is open; grows the bracket to 32 first if none is left; 409 if a 32 bracket has none. The automatic step then climbs them until they meet someone. |
+| Move a player (round one) | 5.2 | O-17. Only a player waiting in round one, or in a not-started round-one match, and only to an **open place** (as for Add); 409 otherwise, naming why. A not-started match they were in is deleted and their seat-mate waits. They land by the 5.2 seating, so a waiting player on the seat beside pairs with them at once. The automatic step then runs — after close that can give a free pass, and the confirmation says so. |
 | Replace a player in a match | 5.6 | Recomputes `start_points`, `start_entry_id` and both rating snapshots. In round one the two players swap slots; from round two the newcomer must be waiting in the match's box. |
 | Grant / revoke a free pass | 5.4 | Direct write to `free_passes`, then the automatic step (grant). A revoke is refused once the holder is in a later match. |
 | Reopen buy-backs | — | Clears `buybacks_closed_at` **and takes back what the close caused**: every free pass, and the not-started matches their holders reached through them. Refuses, naming the match, if one has started. |
@@ -694,7 +696,7 @@ The minimum unit tests over `lib/`:
 - Correction pulling a winner out of a not-started next-round match (the other player waits in the box until the new winner arrives) and out of a free pass; rejection when the loser's buy-back match has started (5.7, O-6).
 - Cancel start clears the clock, leaves the pairing intact, and the match can be started again (5.8).
 - Rating adjustment: finishing order for a 16-player night with buy-backs, the default groups, no player in both, a winner whose handicap crosses zero into negative, clamping at −100 and 200, and idempotence on a second save (5.9).
-- Overrides: delete refused from round two, pair needs the same box, add takes an open place and climbs, grow renumbers M9 → M17, reopen takes the close's passes back and refuses once a match reached through one has started (5.10).
+- Overrides: delete refused from round two, pair needs the same box, add takes an open place and climbs, grow renumbers M9 → M17, reopen takes the close's passes back and refuses once a match reached through one has started; move goes only to an open place and refuses a player who has played, a started match and a later round (5.10, O-17).
 - No automatic close: the window outlives the last round-one result and a late arrival still gets in until the tap (5.3, O-15); abandon freeing the live slot (5.11).
 - End night here (O-16, 5.11): the night becomes complete with a null winner and every finished match kept, a match in play has its clock thrown away, the players left standing are named, a second tap is refused, the `dry_run` writes nothing, and the rating review still opens — labelling the furthest round reached `R2`, not "final".
 - Tables (5.14): Start without a table is refused naming the free ones, a busy or out-of-range table is refused, a finished match frees its table but keeps the number, Cancel start clears it, a table noted before start counts as the choice only while free, every table busy refuses the start, moving in play needs a free table, and the count cannot drop below a table in play.
@@ -963,6 +965,7 @@ Every route here is a normal admin route with the state guards removed, and ever
 | `POST /api/admin/matches/{id}/override/reset` | — | Any state → `not_started`, unwinding the next round (5.10). |
 | `DELETE /api/admin/matches/{id}/override` | — | Round one only: deletes the match; both entries return to waiting and keep their slots. `409` from round two. |
 | `POST /api/admin/competitions/{id}/override/pair` | `{ entry_id_a, entry_id_b }` | Creates a match between two waiting players in the same round — and, from round two, the same box. |
+| `POST /api/admin/competitions/{id}/override/move` | `{ entry_id, slot }` | Moves a player who has not played to an open round-one place (5.10, O-17); `409` naming the reason otherwise. |
 | `POST /api/admin/competitions/{id}/override/free-pass` | `{ entry_id, from_round }` | Grants a free pass. |
 | `DELETE /api/admin/competitions/{id}/override/free-pass/{id}` | — | Revokes one. |
 | `POST /api/admin/competitions/{id}/override/reopen-buybacks` | — | Clears `buybacks_closed_at` and takes back every free pass and the not-started matches reached through them; `409` naming a match that has started. |
@@ -1005,6 +1008,7 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 | O-14 | How later rounds are paired | **A fixed bracket, like the paper diagram.** The winners of M1 and M2 meet in round two, and so on up the tree; a winner moves up the moment their match ends; a free pass is what an empty other half gives you, in any round, possibly several times to the same player. Drawn as a tree on both pages. | 3.4, 3.8, 5.3, 5.4, 5.7, 5.10, 6.3 |
 | O-15 | When the buy-back window closes | **Only on the organiser's tap.** Entries are accepted until **No More Buy-Backs / Late Entries** is pressed — even after every round-one match has been played. That tap gives every lone round-one player their free pass (O-4) and locks the list. Nothing closes it automatically. | 3.4, 3.5, 4.1, 4.2, 5.3, 7.5 |
 | O-16 | Nights that run out of time | **A night ended early counts as "completed (unfinished)".** The organiser taps **End night here**; the night becomes `complete` with **no winner**, keeps every result, appears in history and opens its rating review as usual. Abandon (O-7) stays what it is: a night that should not count at all. | 3.4, 3.8, 3.11, 5.9, 5.11, 7.4 |
+| O-17 | Moving a player on the override screen | **Round one, players who have not played, open seats only.** The override tree lets the organiser move a player waiting in round one, or in a not-started round-one match, to any open place — dragging with a mouse (the screen is mostly used on a computer) or clicking the player then the seat. Both confirm first. Later rounds follow from the round-one slot (O-14), so they are never moved directly. | 3.9, 5.10, 7.6 |
 
 ### 10.1 Still worth a word from the organiser
 

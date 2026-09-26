@@ -216,6 +216,33 @@ export function overrideDeleteMatch(s: Snapshot, ctx: Ctx, matchId: string): voi
   ctx.log.push({ action: "delete_match", details: { match: matchLabel(s, m), a: playerName(s, m.player_a_id), b: playerName(s, m.player_b_id) } });
 }
 
+/**
+ * Move a player who has not played to an open place (spec 5.10, O-17): waiting in round one, or in a
+ * not-started round-one match, which is deleted first. They pair at once if the seat beside is taken by a
+ * waiting player; then the automatic step runs.
+ */
+export function overrideMovePlayer(s: Snapshot, ctx: Ctx, entryId: string, slot: number): void {
+  if (s.competition.status !== "in_progress") throw conflict("The competition is not running");
+  const entry = entryById(s, entryId);
+  const from = entry.slot;
+  const matches = matchesOf(s, entryId);
+  const m = matches[0];
+  const unplayed = matches.length === 0 ? isWaitingIn(s, entryId, 1) : matches.length === 1 && m.round === 1 && m.state === "not_started";
+  if (!unplayed) throw conflict(`${playerName(s, entryId)} has already played or moved on — only a player who has not played in round one can be moved`);
+  if (slot < 1 || slot > s.competition.bracket_size) throw badRequest(`There is no slot ${slot} in a ${s.competition.bracket_size} bracket`);
+  if (!openPlaces(s).includes(slot)) {
+    throw conflict(entryAtSlot(s, slot) ? `Slot ${slot} is taken` : `Slot ${slot} is under a box already decided`);
+  }
+  if (m) removeMatch(s, m);
+  entry.slot = null;
+  const created = placeInSlot(s, ctx, entry, "override", slot);
+  ctx.log.push({
+    action: "move_player",
+    details: { player: playerName(s, entryId), from, to: slot, ...(m ? { deleted: matchLabel(s, m) } : {}), ...(created ? { match: matchLabel(s, created) } : {}) },
+  });
+  advanceAll(s, ctx);
+}
+
 /** Pair two chosen waiting players in the same round, no randomness. From round two they must share a box. */
 export function overridePair(s: Snapshot, ctx: Ctx, aId: string, bId: string): MatchRow {
   if (aId === bId) throw badRequest("Choose two different players");

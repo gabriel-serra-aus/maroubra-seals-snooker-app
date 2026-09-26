@@ -1447,7 +1447,7 @@ svg.tree {
   cursor: pointer;
 }
 
-.tree-box.clickable:hover rect:first-child {
+.tree-box.clickable:hover > rect:first-child {
   stroke: var(--accent);
   stroke-width: 2;
 }
@@ -1593,6 +1593,78 @@ svg.tree {
 .tree-btn.disabled {
   opacity: 0.5;
   pointer-events: none;
+}
+
+/* Moving a player in the override tree (spec 3.9, O-17): a seat per round-one slot, dragged with a mouse
+   or clicked then clicked again. Touch never drags, so a swipe still scrolls the tree. */
+svg.tree.seating {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+svg.tree.dragging,
+svg.tree.dragging * {
+  cursor: grabbing !important;
+}
+
+.tree-box .tree-seat rect.seat-bg {
+  fill: transparent;
+  stroke: none;
+}
+
+.tree-seat.movable {
+  cursor: grab;
+}
+
+.tree-box .tree-seat.movable:hover rect.seat-bg {
+  fill: var(--accent-bg);
+}
+
+.tree-box .tree-seat.selected rect.seat-bg {
+  fill: var(--accent-bg);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.tree-seat.target {
+  cursor: pointer;
+}
+
+.tree-box .tree-seat.target rect.seat-bg {
+  fill: var(--green-bg);
+  stroke: var(--green);
+  stroke-dasharray: 3 2;
+}
+
+.tree-box .tree-seat.target.over rect.seat-bg,
+.tree-box .tree-seat.target:hover rect.seat-bg {
+  stroke-dasharray: none;
+  stroke-width: 2;
+}
+
+.tree-seat.target .tree-sub {
+  fill: var(--green);
+  font-weight: 700;
+}
+
+.drag-ghost {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  transform: translate(10px, 10px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+}
+
+.move-hint {
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 /* A wide table (the handicap history grid, spec 3.11) scrolls inside itself, never the page */

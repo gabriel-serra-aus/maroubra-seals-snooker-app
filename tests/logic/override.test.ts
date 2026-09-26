@@ -7,6 +7,7 @@ import {
   overrideAddPlayer,
   overrideDeleteMatch,
   overrideGrantFreePass,
+  overrideMovePlayer,
   overridePair,
   overrideRemovePlayer,
   overrideReopenBuybacks,
@@ -201,5 +202,64 @@ describe("override add player follows the placement rule (spec 5.2, O-13)", () =
     const e2 = overrideAddPlayer(s, ctx, "later");
     expect([14, 16]).toContain(e2.slot);
     expect(halfFullPairs(s)).toHaveLength(1);
+  });
+
+  describe("move a player who has not played (spec 5.10, O-17)", () => {
+    it("a waiting player moves to an empty pair; beside a lone waiter they pair at once", () => {
+      const { s, ctx } = startNight({ bracket: 16, ratings: ratings(6) }); // M1, M2, M3; slots 7–16 open
+      overrideDeleteMatch(s, ctx, match(s, 3).id); // slots 5 and 6 both waiting
+      const five = slotEntry(s, 5);
+      const six = slotEntry(s, 6);
+      overrideMovePlayer(s, ctx, five.id, 9);
+      expect(five.slot).toBe(9);
+      expect(hasMatch(s, 5)).toBe(false);
+      overrideMovePlayer(s, ctx, six.id, 10);
+      expect(six.slot).toBe(10);
+      const m5 = match(s, 5);
+      expect([m5.player_a_id, m5.player_b_id]).toEqual([five.id, six.id]);
+      expect(m5.origin).toBe("override");
+      expect(ctx.log.map((l) => l.action)).toEqual(["delete_match", "move_player", "move_player"]);
+    });
+
+    it("a player in a not-started match leaves it: the match goes and the seat-mate waits", () => {
+      const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
+      const m2 = match(s, 2);
+      const [a, b] = [m2.player_a_id, m2.player_b_id];
+      overrideMovePlayer(s, ctx, a, 7);
+      expect(hasMatch(s, 2)).toBe(false);
+      expect(positionOf(s, b)).toEqual({ status: "waiting", round: 1 });
+      expect(positionOf(s, a)).toEqual({ status: "waiting", round: 1 });
+      expect(ctx.log[0].details).toMatchObject({ from: 3, to: 7, deleted: "R1M2" });
+    });
+
+    it("after close the move runs the automatic step: both halves get their free passes", () => {
+      const { s, ctx } = startNight({ bracket: 16, ratings: ratings(4) });
+      closeBuybacks(s, ctx);
+      const a = match(s, 2).player_a_id;
+      const b = match(s, 2).player_b_id;
+      overrideMovePlayer(s, ctx, a, 7);
+      expect(s.freePasses.some((fp) => fp.entry_id === b && fp.from_round === 1)).toBe(true);
+      expect(s.freePasses.some((fp) => fp.entry_id === a && fp.from_round === 1)).toBe(true);
+    });
+
+    it("refuses a started or finished match, a later round, a taken slot and a decided box", () => {
+      const { s, ctx } = startNight({ bracket: 16, ratings: ratings(6) });
+      const m1 = match(s, 1);
+      startOn(s, ctx, m1.id);
+      expect(() => overrideMovePlayer(s, ctx, m1.player_a_id, 9)).toThrow(/has already played/);
+      play(s, ctx, 1, "a", "declined");
+      expect(() => overrideMovePlayer(s, ctx, m1.player_b_id, 9)).toThrow(/has already played/);
+      expect(() => overrideMovePlayer(s, ctx, m1.winner_id!, 9)).toThrow(/has already played/);
+      const m3 = match(s, 3);
+      expect(() => overrideMovePlayer(s, ctx, m3.player_a_id, 3)).toThrow(/Slot 3 is taken/);
+      expect(() => overrideMovePlayer(s, ctx, m3.player_a_id, 17)).toThrow(/no slot 17/);
+    });
+
+    it("refuses an empty seat beside a free-pass holder", () => {
+      const { s, ctx } = startNight({ bracket: 16, ratings: ratings(5) }); // slot 5 alone
+      closeBuybacks(s, ctx); // slot 5 passes; slot 6 sits under that decided box
+      expect(() => overrideMovePlayer(s, ctx, match(s, 1).player_a_id, 6)).toThrow(/under a box already decided/);
+      expect(() => overrideMovePlayer(s, ctx, slotEntry(s, 5).id, 9)).toThrow(/has already played/);
+    });
   });
 });

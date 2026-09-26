@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { BracketPayload, EntryView, MatchView } from "@/lib/bracket/payload";
+import { bracketIsStale, type BracketPayload, type EntryView, type MatchView } from "@/lib/bracket/payload";
+import { BracketTree } from "./BracketTree";
 import { Btn, Spinner } from "./Btn";
 import { useDialog } from "./Dialog";
 import { call, get, post } from "./client/api";
 import { fmtDateTime, fmtRating } from "./client/format";
-import { useAction, usePoll } from "./client/hooks";
+import { useAction, usePoll, useServerClock, useStoredChoice } from "./client/hooks";
+import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 
 interface ActionRow {
   id: string;
@@ -19,6 +21,7 @@ interface ActionRow {
 }
 interface OverrideReply {
   changes: string[];
+  bracket: BracketPayload;
 }
 type ClubPlayer = { id: string; name: string; rating: number; active: boolean };
 
@@ -45,7 +48,12 @@ function positionLabel(e: EntryView, b: BracketPayload): string {
 /** Master override (spec 3.9, O-5): everything the normal screens refuse, each confirmed and logged. */
 export function OverridePanel({ initial, initialActions }: { initial: BracketPayload; initialActions: ActionRow[] }) {
   const router = useRouter();
-  const { data: b, refresh } = usePoll<BracketPayload>("/api/admin/bracket", 5_000, initial);
+  const { data: b, setData } = usePoll<BracketPayload>("/api/admin/bracket", 5_000, initial, bracketIsStale);
+  const now = useServerClock(b.server_now);
+  const [view, setView] = useStoredChoice<BracketViewMode>("override-view", "tree", "tree");
+  // The player picked to move (O-17), and the match whose card a tree box opened.
+  const [picked, setPicked] = useState<string | null>(null);
+  const [openMatch, setOpenMatch] = useState<string | null>(null);
   const [actions, setActions] = useState(initialActions);
   const [notice, setNotice] = useState<string | null>(null);
   const { busy, pending, isPending, error, run, setError } = useAction();
@@ -88,7 +96,8 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
       if (!ok) return;
       const real = await call<OverrideReply>(method, path, body);
       setNotice(`${label}: done. ${real.changes.join("; ")}`);
-      await refresh();
+      // The reply carries the fresh bracket: no second fetch (one round trip per tap).
+      setData(real.bracket);
       setActions((await get<{ actions: ActionRow[] }>(`/api/admin/competitions/${compId}/admin-actions`)).actions);
     }, label);
 
@@ -98,6 +107,14 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
     void get<{ players: ClubPlayer[] }>("/api/admin/players")
       .then((r) => setPlayers(r.players))
       .finally(() => setLoadingPlayers(false));
+  };
+  const pickedEntry = b.entries.find((e) => e.entry_id === picked) ?? null;
+  const selected = allMatches.find((m) => m.id === openMatch);
+  /** Move a player who has not played to an open seat (spec 5.10, O-17): dry run, confirm, then move. */
+  const moveTo = (e: EntryView, slot: number) => {
+    setPicked(null);
+    const box = Math.ceil(slot / 2);
+    void override(`Move ${e.name} to slot ${slot} (R1M${box})`, "POST", `/api/admin/competitions/${compId}/override/move`, { entry_id: e.entry_id, slot });
   };
   const livePlayerIds = new Set(b.entries.filter((e) => e.position.status !== "out").map((e) => e.player_id));
 
@@ -139,12 +156,35 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
         </table>
       </div>
 
-      <h2>Matches</h2>
+      <div className="row between">
+        <h2>Matches</h2>
+        <ViewToggle value={view} onChange={setView} />
+      </div>
+      {view === "tree" ? (
+        <div className="card">
+          {pickedEntry ? (
+            <div className="info move-hint">
+              Moving <strong>{pickedEntry.name}</strong>: click an open seat · Esc to cancel
+            </div>
+          ) : (
+            <p className="muted small">
+              Drag a player who has not played to an open seat, or click them and then the seat. Click a match to reset, delete or replace a player.
+            </p>
+          )}
+          <BracketTree
+            b={b}
+            now={now}
+            onSelect={(m) => setOpenMatch(m.id)}
+            seats={c.status === "in_progress" ? { selected: picked, onPick: (e) => setPicked(e?.entry_id ?? null), onMove: moveTo } : undefined}
+          />
+        </div>
+      ) : null}
       <div className="card">
-        {allMatches.length === 0 && <p className="muted">No matches.</p>}
-        {allMatches.map((m) => (
-          <MatchRow key={m.id} m={m} waiting={waiting.filter((w) => w.position.round === m.round)} busy={busy} isPending={isPending} override={override} />
-        ))}
+        {view === "list" && allMatches.length === 0 && <p className="muted">No matches.</p>}
+        {view === "list" &&
+          allMatches.map((m) => (
+            <MatchRow key={m.id} m={m} waiting={waiting.filter((w) => w.position.round === m.round)} busy={busy} isPending={isPending} override={override} />
+          ))}
         <h3>Pair two waiting players</h3>
         <p className="muted small">From round two the two must share the same place in the tree (spec 5.4); in round one any two waiting players can be paired.</p>
         <div className="row">
@@ -241,6 +281,17 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
         <Link href="/admin">‹ Bracket</Link>
         <Link href="/admin/settings">Settings ›</Link>
       </p>
+      {selected && (
+        <div className="sheet-backdrop" onClick={() => setOpenMatch(null)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="row between">
+              <h2 style={{ margin: 0, border: 0 }}>{selected.label}</h2>
+              <Btn className="sm" onClick={() => setOpenMatch(null)}>Close</Btn>
+            </div>
+            <MatchRow m={selected} waiting={waiting.filter((w) => w.position.round === selected.round)} busy={busy} isPending={isPending} override={override} />
+          </div>
+        </div>
+      )}
       {confirmCard}
     </main>
   );
