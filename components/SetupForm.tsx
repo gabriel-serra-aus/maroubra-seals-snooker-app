@@ -28,7 +28,8 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
   useBracketScreen(comp, setComp);
   const c = comp?.competition ?? null;
   const [name, setName] = useState(c?.name ?? defaults.name);
-  const [sizeChoice, setSizeChoice] = useState<number>(c?.bracket_size ?? 16);
+  // 32 unless the night says otherwise; the start card offers the switch to 16 (spec 3.3).
+  const [sizeChoice, setSizeChoice] = useState<number>(c?.bracket_size ?? 32);
   const [clubPlayers, setClubPlayers] = useState(players);
   const [q, setQ] = useState("");
   const [pickedIn, setPickedIn] = useState<Set<string>>(new Set()); // player ids, left list
@@ -36,7 +37,7 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
   const [adding, setAdding] = useState(false);
   const { busy, isPending, error, run, setError } = useAction();
   // Confirmations are the app's own centred card, never a browser dialog (spec 3.5).
-  const { ask, dialog: confirmCard } = useDialog();
+  const { ask, askChoice, dialog: confirmCard } = useDialog();
 
   const entries = comp?.entries ?? [];
   const entered = new Set(entries.map((e) => e.player_id));
@@ -83,21 +84,33 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
       setPickedOut(new Set());
     }, "remove");
 
+  /**
+   * Start (spec 3.3): the card says plainly that the bracket size is fixed from here, and offers the other
+   * size in the same tap when tonight's players fit it.
+   */
   const start = () => {
     if (!c) return;
+    const other = B === 32 ? 16 : 32;
+    const fits = n <= other;
+    const card = {
+      title: `Start with ${n} player${n === 1 ? "" : "s"} in a ${B} bracket?`,
+      body: <p><strong>The bracket size cannot be changed once the competition starts.</strong> The draw is made now and the night begins.</p>,
+      points: [
+        `${B - n} open slot${B - n === 1 ? "" : "s"} are held for buy-backs and late arrivals.`,
+        "From here players can only join as a buy-back or a late arrival.",
+        ...(fits ? [] : [`${n} players are too many for a ${other} bracket.`]),
+      ],
+      confirm: `Start with ${B}`,
+      cancel: "Not yet",
+    };
     void (async () => {
-      const ok = await ask({
-        title: `Start with ${n} player${n === 1 ? "" : "s"} in a ${B} bracket?`,
-        body: "The draw is made now and the night begins.",
-        points: [
-          "The bracket size cannot be changed afterwards (§8.1).",
-          `${B - n} open slot${B - n === 1 ? "" : "s"} are held for buy-backs and late arrivals.`,
-          "From here players can only join as a buy-back or a late arrival.",
-        ],
-        confirm: "Start the night",
-        cancel: "Not yet",
-      });
-      if (!ok) return;
+      // The other size, when tonight's players fit it, is one tap on the same card; Start then asks again.
+      const answer = fits ? await askChoice({ ...card, other: `Switch to ${other}` }) : (await ask(card)) ? "confirm" : null;
+      if (answer === "other") {
+        chooseSize(other);
+        return;
+      }
+      if (answer !== "confirm") return;
       void run(async () => {
         await post(`/api/admin/competitions/${c.id}/start`);
         router.push("/admin");

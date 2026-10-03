@@ -40,9 +40,15 @@ export interface AskTextOptions extends Omit<AskOptions, "danger"> {
   validate?: (value: string) => string | null;
 }
 
+export interface AskChoiceOptions extends AskOptions {
+  /** A second way forward, between the confirm and cancel buttons (e.g. "Switch to 16 and start"). */
+  other: string;
+}
+
 type Open =
   | { kind: "ask"; opts: AskOptions; done: (v: boolean) => void }
-  | { kind: "text"; opts: AskTextOptions; done: (v: string | null) => void };
+  | { kind: "text"; opts: AskTextOptions; done: (v: string | null) => void }
+  | { kind: "choice"; opts: AskChoiceOptions; done: (v: "confirm" | "other" | null) => void };
 
 /** Whatever a dialog resolves to when it is dismissed rather than confirmed. */
 const cancelled = (o: Open) => (o.kind === "ask" ? o.done(false) : o.done(null));
@@ -65,6 +71,8 @@ export function useDialog() {
 
   const ask = useCallback((opts: AskOptions) => new Promise<boolean>((done) => start({ kind: "ask", opts, done })), [start]);
   const askText = useCallback((opts: AskTextOptions) => new Promise<string | null>((done) => start({ kind: "text", opts, done })), [start]);
+  /** Confirm, the other way forward, or null when backed out (Escape, backdrop, cancel). */
+  const askChoice = useCallback((opts: AskChoiceOptions) => new Promise<"confirm" | "other" | null>((done) => start({ kind: "choice", opts, done })), [start]);
 
   const answer = useCallback((value: boolean | string | null) => {
     const o = live.current;
@@ -72,13 +80,14 @@ export function useDialog() {
     setOpen(null);
     if (!o) return;
     if (o.kind === "ask") o.done(value === true);
+    else if (o.kind === "choice") o.done(value === true ? "confirm" : value === "other" ? "other" : null);
     else o.done(typeof value === "string" ? value : null);
   }, []);
 
   // A dialog left open by a screen that goes away resolves as cancelled rather than hanging.
   useEffect(() => () => { if (live.current) cancelled(live.current); }, []);
 
-  return { ask, askText, dialog: open ? <DialogCard o={open} onAnswer={answer} /> : null };
+  return { ask, askText, askChoice, dialog: open ? <DialogCard o={open} onAnswer={answer} /> : null };
 }
 
 function DialogCard({ o, onAnswer }: { o: Open; onAnswer: (v: boolean | string | null) => void }) {
@@ -92,7 +101,7 @@ function DialogCard({ o, onAnswer }: { o: Open; onAnswer: (v: boolean | string |
   const dismiss = useCallback(() => onAnswer(o.kind === "ask" ? false : null), [o.kind, onAnswer]);
 
   const submit = () => {
-    if (o.kind === "ask") return onAnswer(true);
+    if (o.kind !== "text") return onAnswer(true);
     const bad = o.opts.validate?.(value) ?? null;
     if (bad) return setProblem(bad);
     onAnswer(value);
@@ -155,6 +164,7 @@ function DialogCard({ o, onAnswer }: { o: Open; onAnswer: (v: boolean | string |
           <Btn ref={okRef} className={`primary ${danger ? "danger" : ""}`} onClick={submit}>
             {confirmLabel ?? "OK"}
           </Btn>
+          {o.kind === "choice" && <Btn onClick={() => onAnswer("other")}>{o.opts.other}</Btn>}
           <Btn onClick={dismiss}>{cancelLabel ?? "Cancel"}</Btn>
         </div>
       </div>

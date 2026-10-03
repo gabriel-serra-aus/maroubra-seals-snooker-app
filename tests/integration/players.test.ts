@@ -60,3 +60,12 @@ describe("the public site shows short names and no photos (spec 3.8, 7.2, O-21)"
     expect((await api.abandon(comp)).status).toBe(200);
   });
 });
+
+describe("setup defaults (spec 3.3, 7.4)", () => {
+  it("a new night is a 32 bracket unless told otherwise", async () => {
+    const c = await api.createCompetition({ name: "Default size" });
+    expect(c.status).toBe(201);
+    expect(c.body.competition.bracket_size).toBe(32);
+    expect((await api.abandon(c.body.competition.id)).status).toBe(200);
+  });
+});

@@ -168,11 +168,11 @@ Shows the competition name, bracket size, a one-line reminder of the time limit,
 
 | Action | What happens |
 | --- | --- |
-| Bracket size | 16 or 32 (§8.1). Disabled if more players are ticked than the size allows. |
+| Bracket size | 16 or 32 (§8.1), **32 by default**. Disabled if more players are ticked than the size allows. |
 | Change › / Settings › | Opens 3.10. The time limit and rating scale are deliberately off this screen so the night's setup is two decisions: size and players. |
 | Add › / ‹ Remove | Tick any number in one list and move them across in **one request** (`player_ids` / `entry_ids`, 7.4); the reply carries the bracket, so the screen never re-fetches. Add is disabled, with the reason, when the ticked players would not fit. |
 | New player | Opens the add-player dialog from 3.2 and enters them straight into tonight's list. |
-| **Start Competition** | Confirms ("Start with 13 players in a 16 bracket? The bracket size cannot be changed afterwards."). Shuffles the entered players, fills round one top to bottom with no gaps, leaves the rest open for buy-backs and late arrivals, and makes any odd player out a waiting player (§8.2). Each slot fixes that player's place in the whole tree (5.4). Lands on 3.4. |
+| **Start Competition** | Confirms on the centred card: "Start with 13 players in a 32 bracket?", with **"The bracket size cannot be changed once the competition starts"** in bold, and three buttons — **Start with 32**, **Switch to 16** (changes the size and closes the card; Start asks again with the new size) and **Not yet**. The switch is offered only when tonight's players fit the other size. Shuffles the entered players, fills round one top to bottom with no gaps, leaves the rest open for buy-backs and late arrivals, and makes any odd player out a waiting player (§8.2). Each slot fixes that player's place in the whole tree (5.4). Lands on 3.4. |
 
 After Start the bracket size is locked (§8.1) and players are added only as late arrivals (§8.3) or through the override (3.9). Setup is unreachable until the night is complete or abandoned.
 
@@ -957,7 +957,7 @@ All require the cookie.
 
 | Method + route | Input | Validation |
 | --- | --- | --- |
-| `POST /api/admin/competitions` | `{ name, bracket_size, default_time_limit_minutes?, table_count?, rating_*? }` | No other competition `setup` or `in_progress`; size ∈ {16, 32}; limit 1–180; tables 1–16; rating counts ≥ 0. Table count and rating settings default from the previous competition (four tables on the first night). Creates in `setup`; the reply carries the empty `bracket`. |
+| `POST /api/admin/competitions` | `{ name, bracket_size?, default_time_limit_minutes?, table_count?, rating_*? }` | No other competition `setup` or `in_progress`; size ∈ {16, 32}, default 32; limit 1–180; tables 1–16; rating counts ≥ 0. Table count and rating settings default from the previous competition (four tables on the first night). Creates in `setup`; the reply carries the empty `bracket`. |
 | `PATCH /api/admin/competitions/{id}` | any of `{ name, bracket_size, default_time_limit_minutes, table_count, rating_* }` | `bracket_size` and `rating_*` only while `setup`. `default_time_limit_minutes` and `table_count` any time before `complete`; the limit affects matches not yet started, the count cannot drop below a table in play (`409`, 5.14). What 3.3 and 3.10 call. |
 | `POST /api/admin/competitions/{id}/entries` | `{ player_id }`, `{ new_player: {...} }` or `{ player_ids: [...] }` | Player must be active (O-9). `setup`: adds a first-draw entry; total ≤ `bracket_size`. `in_progress` with buy-backs open: adds a **late arrival** as a `late` entry (§3, §8.3), requires an open slot (O-3), places at once (5.2); the reply carries `match_number` or `awaiting_in`. A player already in tonight's competition is `409`; a round-one loser is `409` naming Review result. `player_ids` (up to 64) is `setup` only. |
 | `DELETE /api/admin/competitions/{id}/entries/{entry_id}` | — | `setup` only. Removing a player from a running night is an override. |

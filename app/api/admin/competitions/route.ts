@@ -21,7 +21,7 @@ export const POST = handle(async (request) => {
   const body = await readJson(request);
   const db = await getDb();
   const prev = await previousRatingSettings(db);
-  const size = optionalInt(body, "bracket_size", 16, 32) ?? 16;
+  const size = optionalInt(body, "bracket_size", 16, 32) ?? 32;
   if (size !== 16 && size !== 32) return json({ error: "bracket_size must be 16 or 32" }, { status: 400 });
   // The reply carries the (empty) bracket so the setup screen can show it without a second request.
   const { competition, bracket } = await db.transaction(async (tx) => {
