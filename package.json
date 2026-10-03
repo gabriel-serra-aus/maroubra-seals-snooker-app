@@ -12,7 +12,10 @@
     "test:watch": "vitest",
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs",
-    "db:migrate:prod": "node scripts/migrate-prod.mjs"
+    "db:migrate:prod": "node scripts/migrate-prod.mjs",
+    "db:backup": "node scripts/backup.mjs",
+    "db:backup:prod": "node scripts/backup.mjs --prod",
+    "db:restore": "node scripts/restore.mjs"
   },
   "dependencies": {
     "next": "16.3.4",

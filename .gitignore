@@ -13,3 +13,6 @@ next-env.d.ts
 # Local tooling
 .playwright-mcp/
 .claude/settings.local.json
+
+# Database dumps (scripts/backup.mjs): members' names and photos, never committed
+backups/

@@ -25,3 +25,17 @@ export async function openDb() {
     close: () => pg.close(),
   };
 }
+
+// Foreign-key order, so a restore can insert front to back. Used by backup.mjs and restore.mjs; keep in step with supabase/migrations/.
+export const TABLES = [
+  "players",
+  "player_photos",
+  "competitions",
+  "rating_changes",
+  "entries",
+  "matches",
+  "free_passes",
+  "admin_actions",
+  "schema_migrations",
+];
+
