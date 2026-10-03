@@ -1,12 +1,16 @@
-// PUT /api/admin/players/{id}/photo (raw image body) and DELETE (spec 7.3, 6.6, O-18).
+// GET, PUT (raw image body) and DELETE /api/admin/players/{id}/photo (spec 7.3, 6.6, O-18).
+// Photos are for the organiser's screens only (O-21): GET needs the session like every admin route.
 // The phone shrinks the photo before it is sent; this checks the type, the size and that the bytes are
 // really that type of image, then stores it.
 import { getDb } from "@/lib/db/client";
-import { PHOTO_MAX_BYTES, PHOTO_TYPES, clearPlayerPhoto, setPlayerPhoto, type PhotoType } from "@/lib/db/players";
+import { PHOTO_MAX_BYTES, PHOTO_TYPES, clearPlayerPhoto, getPlayerPhoto, setPlayerPhoto, type PhotoType } from "@/lib/db/players";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json } from "@/lib/api/respond";
 import { photoUrl } from "@/lib/bracket/payload";
-import { badRequest } from "@/lib/logic/errors";
+import { isUuid } from "@/lib/api/validate";
+import { badRequest, notFound } from "@/lib/logic/errors";
+
+export const dynamic = "force-dynamic";
 
 const startsWith = (b: Uint8Array, sig: number[], at = 0) => sig.every((x, i) => b[at + i] === x);
 const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
@@ -17,6 +21,26 @@ function looksLike(mime: PhotoType, b: Uint8Array): boolean {
   if (mime === "image/png") return startsWith(b, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   return startsWith(b, ascii("RIFF")) && startsWith(b, ascii("WEBP"), 8);
 }
+
+/**
+ * The photo bytes. The URL carries the photo's version, so the answer never changes: the browser keeps it
+ * for a year (`private` — never a shared cache, since it needs the cookie).
+ */
+export const GET = handle(async (request, { params }) => {
+  requireAdmin(request);
+  const { id } = await params;
+  if (!isUuid(id)) throw notFound("Photo not found");
+  const db = await getDb();
+  const photo = await getPlayerPhoto(db, id);
+  if (!photo) throw notFound("Photo not found");
+  return new Response(new Uint8Array(photo.bytes), {
+    headers: {
+      "Content-Type": photo.mime,
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+});
 
 export const PUT = handle(async (request, { params }) => {
   requireAdmin(request);

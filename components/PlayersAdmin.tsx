@@ -6,6 +6,7 @@ import { Btn } from "./Btn";
 import { del, get, patch, post, put } from "./client/api";
 import { fmtDate, fmtRating } from "./client/format";
 import { useAction } from "./client/hooks";
+import { publicNames } from "@/lib/names";
 
 export interface ClubPlayer {
   id: string;
@@ -35,10 +36,12 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
   const shown = players.filter((p) => (showInactive || p.active) && p.name.toLowerCase().includes(q.trim().toLowerCase()));
   const active = shown.filter((p) => p.active);
   const inactive = shown.filter((p) => !p.active);
+  // The public site shows "First L." (O-21); names still alike at three letters need the organiser.
+  const { names: publicName, clashes } = publicNames(players.filter((p) => p.active));
   const Row = ({ p }: { p: ClubPlayer }) => (
     <tr>
       <td>
-        <Avatar name={p.name} photo={p.photo} size={36} /> {p.name}
+        <Avatar id={p.id} name={p.name} photo={p.photo} size={36} /> {p.name}
         {!p.active && <span className="muted"> (inactive)</span>}
       </td>
       <td className="num">{fmtRating(p.rating)}</td>
@@ -50,6 +53,12 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
   return (
     <main className="medium">
       <h1>Players &amp; ratings</h1>
+      {clashes.map((c) => (
+        <div key={c.join("|")} className="notice">
+          ⚠ These players read the same on the public site ({publicName.get(players.find((p) => p.name === c[0])!.id)}): {c.join(", ")}.
+          Edit one of the names so they differ — for example add a nickname in brackets, &quot;John Smith (Smithy)&quot;.
+        </div>
+      ))}
       <input type="search" placeholder="Search players…" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="row between" style={{ margin: "8px 0" }}>
         <button className="btn" onClick={() => setAdding(true)}>+ Add player</button>
@@ -128,7 +137,7 @@ function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) =>
     <div className="field photo-field">
       <span className="muted small">Photo</span>
       <div className="row">
-        <Avatar name={p.name} photo={p.photo} size={94} />
+        <Avatar id={p.id} name={p.name} photo={p.photo} size={94} />
         <input
           ref={input}
           type="file"

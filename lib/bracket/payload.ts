@@ -1,4 +1,5 @@
-// The bracket JSON (spec 7.2) built from a Snapshot. Public and admin routes and the pages all use it.
+// The bracket JSON (spec 7.2) built from a Snapshot. Public and admin routes and the pages all use it; the
+// public build (lib/bracket/public.ts) swaps in short names and drops photos (O-21).
 
 import {
   boxLabel,
@@ -34,7 +35,7 @@ export interface EntryView {
   /** True when this player already has a buy-back entry tonight (so a draw-entry loser cannot buy back again). */
   has_buyback_entry: boolean;
   position: Position;
-  /** The player's photo URL, or null to show their initials (spec 6.6, O-18). */
+  /** The player's photo URL, or null to show their initials (spec 6.6, O-18). Always null on the public site (O-21). */
   photo: string | null;
 }
 
@@ -127,9 +128,9 @@ export interface BracketPayload {
   players: Array<{ id: string; name: string; rating: number; photo: string | null }>;
 }
 
-/** The public URL of a player's photo, versioned so a new one busts every cache; null without one (spec 6.6). */
+/** The organiser-only URL of a player's photo, versioned so a new one busts every cache; null without one (spec 6.6, O-21). */
 export function photoUrl(p: { id: string; photo_at?: Date | string | null }): string | null {
-  return p.photo_at ? `/api/public/players/${p.id}/photo?v=${new Date(p.photo_at).getTime()}` : null;
+  return p.photo_at ? `/api/admin/players/${p.id}/photo?v=${new Date(p.photo_at).getTime()}` : null;
 }
 
 const iso = (d: Date | null) => (d ? new Date(d).toISOString() : null);
@@ -143,17 +144,23 @@ export function bracketIsStale(incoming: BracketPayload, current: BracketPayload
   return !!incoming.competition && !!current.competition && incoming.competition.id === current.competition.id && incoming.version < current.version;
 }
 
-export function buildBracketPayload(s: Snapshot | null, now = new Date()): BracketPayload {
+/**
+ * `publicNames` makes the public build (O-21): each player's name is looked up there instead of the full
+ * name, and every photo is null.
+ */
+export function buildBracketPayload(s: Snapshot | null, now = new Date(), publicNames?: ReadonlyMap<string, string>): BracketPayload {
   if (!s || s.competition.status === "abandoned") return { server_now: now.toISOString(), version: "", competition: null, rounds: [], entries: [], players: [] };
   const c = s.competition;
   const B = c.bracket_size;
+  const nameOf = (p: Snapshot["players"][number]) => (publicNames ? (publicNames.get(p.id) ?? "?") : p.name);
+  const photoOf = (p: Snapshot["players"][number]) => (publicNames ? null : photoUrl(p));
   const view = (entryId: string): EntryView => {
     const e = s.entries.find((x) => x.id === entryId)!;
     const p = s.players.find((x) => x.id === e.player_id);
     return {
       entry_id: e.id,
       player_id: e.player_id,
-      name: p?.name ?? "?",
+      name: p ? nameOf(p) : "?",
       rating: p?.rating ?? e.rating_at_entry,
       source: e.source,
       slot: e.slot,
@@ -161,7 +168,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
       buyback_decision: e.buyback_decision,
       has_buyback_entry: s.entries.some((x) => x.player_id === e.player_id && x.source === "buyback"),
       position: positionOf(s, e.id),
-      photo: p ? photoUrl(p) : null,
+      photo: p ? photoOf(p) : null,
     };
   };
   const matchView = (m: Snapshot["matches"][number]): MatchView => ({
@@ -253,7 +260,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date()): Brack
     entries: s.entries.map((e) => view(e.id)).sort((x, y) => x.name.localeCompare(y.name) || (x.buyback_seq ?? 0) - (y.buyback_seq ?? 0)),
     players: s.players
       .filter((p) => s.entries.some((e) => e.player_id === p.id))
-      .map((p) => ({ id: p.id, name: p.name, rating: p.rating, photo: photoUrl(p) }))
+      .map((p) => ({ id: p.id, name: nameOf(p), rating: p.rating, photo: photoOf(p) }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
 }

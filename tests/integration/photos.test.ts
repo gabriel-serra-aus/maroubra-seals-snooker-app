@@ -20,24 +20,25 @@ const decode = (b: Uint8Array) => JSON.parse(new TextDecoder().decode(b)) as { e
 describe("player photos (spec 6.6, 7.3, O-18)", () => {
   let id = "";
 
-  it("upload, then the public route serves the same bytes with a year-long cache", async () => {
+  it("upload, then the organiser's route serves the same bytes with a year-long private cache; the public site never sees it (O-21)", async () => {
     id = (await api.createPlayer("Photo Player", 20)).body.player.id;
     expect((await api.publicPlayers()).body.players.find((p) => p.id === id)?.photo).toBeNull();
     const bytes = jpeg();
     const put = await api.putPhoto(id, bytes, "image/jpeg");
     expect(put.status).toBe(200);
     const url = decode(put.bytes).player?.photo;
-    expect(url?.startsWith(`/api/public/players/${id}/photo?v=`)).toBe(true);
-    expect((await api.publicPlayers()).body.players.find((p) => p.id === id)?.photo).toBe(url);
-    const got = await api.publicPhoto(id);
+    expect(url?.startsWith(`/api/admin/players/${id}/photo?v=`)).toBe(true);
+    expect((await api.publicPlayers()).body.players.find((p) => p.id === id)?.photo).toBeNull();
+    expect((await api.getPhoto(id, false)).status).toBe(401);
+    const got = await api.getPhoto(id);
     expect(got.status).toBe(200);
     expect(got.headers.get("content-type")).toBe("image/jpeg");
-    expect(got.headers.get("cache-control")).toMatch(/immutable/);
+    expect(got.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
     expect([...got.bytes]).toEqual([...bytes]);
     // A new photo is a new URL, so no cache can keep showing the old one.
     const again = await api.putPhoto(id, jpeg(80), "image/jpeg");
     expect(decode(again.bytes).player?.photo).not.toBe(url);
-    expect((await api.publicPhoto(id)).bytes.length).toBe(80);
+    expect((await api.getPhoto(id)).bytes.length).toBe(80);
   });
 
   it("refuses a wrong type, bytes that are not that type, a photo too big, and no session", async () => {
@@ -51,12 +52,11 @@ describe("player photos (spec 6.6, 7.3, O-18)", () => {
     expect((await api.putPhoto(id, jpeg(), "image/jpeg", false)).status).toBe(401);
   });
 
-  it("delete clears it: initials again, and the public route answers 404", async () => {
+  it("delete clears it: initials again, and the photo route answers 404", async () => {
     const del = await api.deletePhoto(id);
     expect(del.status).toBe(200);
     expect(del.body.player.photo).toBeNull();
-    expect((await api.publicPlayers()).body.players.find((p) => p.id === id)?.photo).toBeNull();
-    expect((await api.publicPhoto(id)).status).toBe(404);
+    expect((await api.getPhoto(id)).status).toBe(404);
     setCookie("");
     expect((await api.deletePhoto(id)).status).toBe(401);
   });

@@ -35,3 +35,28 @@ describe("renaming a player (spec 3.2, 7.3)", () => {
     expect((await api.patchPlayer(a, { name: "ZAK SADRY" })).status).toBe(200);
   });
 });
+
+describe("the public site shows short names and no photos (spec 3.8, 7.2, O-21)", () => {
+  it("no full name or photo URL on any public route; the admin bracket keeps both", async () => {
+    const names = ["Chris Hanandas", "Chris Hall", "Leonard Thomlinson (Lenny)", "Gareth Hampson"];
+    const ids: string[] = [];
+    for (const n of names) ids.push((await api.createPlayer(n, 10)).body.player.id);
+    const jpeg = new Uint8Array(64);
+    jpeg.set([0xff, 0xd8, 0xff, 0xe0]);
+    expect((await api.putPhoto(ids[0], jpeg, "image/jpeg")).status).toBe(200);
+    const comp = (await api.createCompetition({ name: "Monday 5 Oct 2026", bracket_size: 16 })).body.competition.id;
+    expect((await api.addEntries(comp, ids)).status).toBe(201);
+    expect((await api.start(comp)).status).toBe(200);
+
+    const pub = JSON.stringify((await api.publicBracket()).body) + JSON.stringify((await api.publicPlayers()).body);
+    for (const surname of ["Hanandas", "Hall", "Thomlinson", "Hampson", "Leonard"]) expect(pub).not.toContain(surname);
+    expect(pub).not.toContain("/photo");
+    const shown = (await api.publicBracket()).body.entries.map((e) => e.name).sort();
+    expect(shown).toEqual(["Chris Hal.", "Chris Han.", "Gareth H.", "Lenny T."]);
+
+    const admin = (await api.bracket()).body;
+    expect(admin.entries.map((e) => e.name)).toContain("Chris Hanandas");
+    expect(admin.entries.find((e) => e.name === "Chris Hanandas")?.photo).toMatch(/^\/api\/admin\/players\/.+\/photo\?v=/);
+    expect((await api.abandon(comp)).status).toBe(200);
+  });
+});

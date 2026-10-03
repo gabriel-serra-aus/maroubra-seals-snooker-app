@@ -1,16 +1,14 @@
-// GET /api/public/players (spec 7.2): active players and ratings.
+// GET /api/public/players (spec 7.2): active players and ratings, short names and no photos (O-21).
 import { getDb } from "@/lib/db/client";
-import { listPlayers } from "@/lib/db/players";
+import { publicPlayers } from "@/lib/bracket/public";
 import { handle } from "@/lib/api/respond";
-import { photoUrl } from "@/lib/bracket/payload";
 
 export const dynamic = "force-dynamic";
 
 export const GET = handle(async () => {
   const db = await getDb();
-  const players = await listPlayers(db, false);
   return Response.json(
-    { players: players.map((p) => ({ id: p.id, name: p.name, rating: p.rating, photo: photoUrl(p) })) },
+    { players: await publicPlayers(db) },
     { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } },
   );
 });

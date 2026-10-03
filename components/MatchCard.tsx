@@ -75,7 +75,7 @@ export function PlayerLine({ e, m, className }: { e: EntryView; m: MatchView; cl
   return (
     <div className={`player ${className ?? ""} ${m.winner_id === e.entry_id ? "winner" : ""} ${isLoser ? "loser" : ""}`}>
       <span>
-        <Avatar name={e.name} photo={e.photo} /> <span className="name">{e.name}</span> <span className="muted">({fmtRating(e.entry_id === m.a.entry_id ? m.rating_a : m.rating_b)})</span> <SourceTag e={e} />
+        <Avatar id={e.player_id} name={e.name} photo={e.photo} /> <span className="name">{e.name}</span> <span className="muted">({fmtRating(e.entry_id === m.a.entry_id ? m.rating_a : m.rating_b)})</span> <SourceTag e={e} />
       </span>
       <span className="muted facts">
         {/* The handicap start sits on the weaker player's own line, so the number is read with the name (rules §6, spec 5.6). */}
@@ -102,7 +102,7 @@ export function StartNote({ m }: { m: MatchView }) {
 function Faces({ m }: { m: MatchView }) {
   const face = (e: EntryView) => (
     <div className={`face ${m.winner_id === e.entry_id ? "winner" : ""}`}>
-      <Avatar name={e.name} photo={e.photo} size={114} />
+      <Avatar id={e.player_id} name={e.name} photo={e.photo} size={114} />
       <span className="face-name">{e.name}</span>
     </div>
   );

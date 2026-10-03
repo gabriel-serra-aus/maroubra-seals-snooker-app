@@ -3,7 +3,8 @@
 import { useId } from "react";
 
 // A player's face beside their name (spec 6.6, O-18): their photo, or their initials on a colour picked from
-// the name, so a row without a photo keeps the same shape as one with.
+// the player's id, so a row without a photo keeps the same shape as one with. The colour stays put through a
+// rename and is the same on the public site, which shows initials only (O-21).
 
 function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -13,15 +14,15 @@ function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-/** A steady hue per name, so a player keeps their colour from week to week. */
-function hue(name: string): number {
+/** A steady hue per player, so they keep their colour from week to week and on every screen. */
+function hue(id: string): number {
   let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return h;
 }
 
 /** A round photo or initials, `size` pixels across, for HTML. */
-export function Avatar({ name, photo, size = 26, className }: { name: string; photo: string | null; size?: number; className?: string }) {
+export function Avatar({ id, name, photo, size = 26, className }: { id: string; name: string; photo: string | null; size?: number; className?: string }) {
   const style = { width: size, height: size, fontSize: Math.round(size * 0.42) };
   if (photo) {
     // Served by our own route with a year-long cache (spec 7.2): no image service, which would cost a
@@ -30,14 +31,14 @@ export function Avatar({ name, photo, size = 26, className }: { name: string; ph
     return <img src={photo} alt="" className={`avatar ${className ?? ""}`} style={style} loading="lazy" decoding="async" />;
   }
   return (
-    <span className={`avatar initials ${className ?? ""}`} style={{ ...style, background: `hsl(${hue(name)} 40% 42%)` }} aria-hidden>
+    <span className={`avatar initials ${className ?? ""}`} style={{ ...style, background: `hsl(${hue(id)} 40% 42%)` }} aria-hidden>
       {initials(name)}
     </span>
   );
 }
 
 /** The same, inside the SVG tree: centred on (cx, cy) with radius r. */
-export function AvatarSvg({ name, photo, cx, cy, r }: { name: string; photo: string | null; cx: number; cy: number; r: number }) {
+export function AvatarSvg({ id, name, photo, cx, cy, r }: { id: string; name: string; photo: string | null; cx: number; cy: number; r: number }) {
   const clip = useId();
   if (photo) {
     return (
@@ -51,7 +52,7 @@ export function AvatarSvg({ name, photo, cx, cy, r }: { name: string; photo: str
   }
   return (
     <g className="tree-avatar" aria-hidden>
-      <circle cx={cx} cy={cy} r={r} style={{ fill: `hsl(${hue(name)} 40% 42%)` }} />
+      <circle cx={cx} cy={cy} r={r} style={{ fill: `hsl(${hue(id)} 40% 42%)` }} />
       <text x={cx} y={cy + r * 0.36} className="tree-initials" style={{ fontSize: r * 0.95 }}>
         {initials(name)}
       </text>

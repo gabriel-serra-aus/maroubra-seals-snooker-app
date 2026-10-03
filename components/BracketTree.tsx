@@ -36,7 +36,7 @@ function Line({ e, y, x, muted, winner, loser, rating, start }: { e: EntryView; 
   // A small face before the name (O-18); the name is cut a little shorter to make room.
   return (
     <g>
-      <AvatarSvg name={e.name} photo={e.photo} cx={x + 9} cy={y - 4} r={9} />
+      <AvatarSvg id={e.player_id} name={e.name} photo={e.photo} cx={x + 9} cy={y - 4} r={9} />
       <text x={x + 22} y={y} className={`tree-name ${muted ? "muted" : ""} ${winner ? "winner" : ""} ${loser ? "loser" : ""}`}>
         {winner ? "✔ " : ""}
         {cut(e.name, start ? 10 : 15)} <tspan className="tree-rating">({fmtRating(rating ?? e.rating)})</tspan>

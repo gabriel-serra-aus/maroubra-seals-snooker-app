@@ -10,7 +10,7 @@ import { MatchCard, SourceTag, type MatchActions } from "./MatchCard";
 export function EntryName({ e }: { e: EntryView }) {
   return (
     <span>
-      <Avatar name={e.name} photo={e.photo} /> {e.name} <span className="muted">({fmtRating(e.rating)})</span> <SourceTag e={e} />
+      <Avatar id={e.player_id} name={e.name} photo={e.photo} /> {e.name} <span className="muted">({fmtRating(e.rating)})</span> <SourceTag e={e} />
     </span>
   );
 }

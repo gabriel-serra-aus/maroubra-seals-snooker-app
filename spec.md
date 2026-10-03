@@ -112,7 +112,7 @@ The app runs one snooker competition on one night. Before the night, the organis
 | Role | How they get in | What they can do |
 | --- | --- | --- |
 | **Organiser** | Types one of the club's **admin codes** on the login screen. A session cookie keeps the phone logged in. | Everything: players and ratings, setup and start, buy-backs, start/complete/cancel/correct matches, Force Pair, Close Buy-Backs, master override, end or abandon the night, adjust ratings afterwards, settings. |
-| **Public viewer** | Opens the public page. No login. | Read only: bracket, match states and clocks, players, ratings and starts. |
+| **Public viewer** | Opens the public page. No login. | Read only: bracket, match states and clocks, players, ratings and starts — every player shown as first name and surname initial, with no photos (O-21). |
 
 - There are **several admin codes, one per organiser, each with a name** (O-8). The name attached to the code that was used is recorded as "changed by" on every rating change (§13) and as the actor on every override. No accounts, no password resets, no email: the code *is* the identity.
 - The organiser stays logged in until the cookie expires or **their** code changes. Each cookie is signed with the code that created it, so changing one person's code logs out only that person (7.1).
@@ -154,9 +154,11 @@ Shows every active player's name and rating, inactive players behind a toggle, a
 | Add player | Name and starting rating. The first rating is recorded as a rating change so its origin is in the history. |
 | Edit → Save | Renames the player and/or overrides the rating. A new name must still be unique, ignoring case; a rename keeps every result and the rating history, and writes an `admin_actions` row naming the organiser (O-8). A rating change writes a history row recording old value, new value, the signed-in organiser and the time (O-8). **Changing a rating never changes the start of a match already created tonight** (5.6). |
 | Active / Inactive | Deactivating hides the player from the entry list and the public list, and blocks them from being entered. Neither direction touches their history. A player in tonight's competition cannot be deactivated until the night is complete or abandoned. |
-| Photo (O-18) | On the edit sheet: **Take / choose photo** opens the phone's camera or gallery; the phone crops the centre square, shrinks it to 320 pixels and uploads it at once (no Save needed). **Change photo** replaces it and **Remove photo** takes it away. Every list shows the photo small beside the name, or the player's initials on a colour of their own when there is none. |
+| Photo (O-18) | On the edit sheet: **Take / choose photo** opens the phone's camera or gallery; the phone crops the centre square, shrinks it to 320 pixels and uploads it at once (no Save needed). **Change photo** replaces it and **Remove photo** takes it away. Every list on the organiser's screens shows the photo small beside the name, or the player's initials on a colour of their own when there is none. The public site never shows photos (O-21). |
 
 There is no delete (O-9). If a player was added by mistake, deactivate them.
+
+**Public names (O-21).** The public site shows each player as first name and surname initial ("Gabriel S."); a bracketed nickname stands in for the first name ("Leonard Thomlinson (Lenny)" → "Lenny T."). When two active players would read the same, both get more surname letters, up to three ("Chris Han." / "Chris Hal."). If they still read the same, this screen shows a warning naming them, and the organiser edits one of the names — a nickname in brackets is the easy fix.
 
 ### 3.3 Competition setup and draw
 
@@ -300,11 +302,13 @@ Shows every player who took part, in finishing order (5.9), with the proposed ra
 
 Read-only, no login. Refreshes every 10 seconds so clocks and results stay current.
 
+**Privacy (O-21).** Every name on this page is the public name from 3.2 ("Gabriel S."), and every player shows as their initials on their colour — never a photo. The server builds the public payloads that way, so a full name or photo never leaves on a public route.
+
 Shows the same match list as 3.4 (state colour, players, ratings, start, countdown, timed-out warning, winner, buy-back decision), boxes awaiting an opponent, open slots, all free-pass holders, the round structure for the whole night, and the **active** player list with ratings — or, with the switch on **Tree**, the whole bracket drawn as on paper (5.4): every box of every round, connectors, the winner at the right, empty boxes dashed, free passes marked.
 
 With no competition running it shows the player list and "No competition tonight yet". An abandoned competition is not shown at all. A night ended early (O-16) is shown as it stands, headed "Complete (unfinished)" with "Night ended early — no winner this week."
 
-**Actions:** none that change anything. Tapping a match expands it to show the start time and limit. On **Tree**, tapping a match box opens it as a card with both players' photos large (O-18); the admin tree's card shows them the same way. List | Tree defaults as on 3.4 and is remembered on that device.
+**Actions:** none that change anything. Tapping a match expands it to show the start time and limit. On **Tree**, tapping a match box opens it as a card with both players large — initials here (O-21), photos on the admin tree's card (O-18). List | Tree defaults as on 3.4 and is remembered on that device.
 
 **Live play first** (UX review, Sep 2026). The page has two sections, as tabs along the top of the navy header on a desktop and along the bottom of the screen on a phone:
 
@@ -896,7 +900,7 @@ Row Level Security is enabled on every table with **no policies**, so the anon k
 | `bytes` | bytea | 1 byte to 300 KB. The phone uploads a 320-pixel JPEG, about 25 KB |
 | `updated_at` | timestamptz | |
 
-`players.photo_at` (timestamptz, null without a photo) is set whenever the photo changes and cleared when it is removed. Every payload that names a player carries `photo`: `/api/public/players/{id}/photo?v={photo_at}`, or null. Because the URL changes with the photo, the photo route can be cached for a year and each photo reaches a function about once (a cost control, like the bracket's `s-maxage`). Photos are **public**: anyone with the page can see them, so the organiser adds one only with the member's agreement.
+`players.photo_at` (timestamptz, null without a photo) is set whenever the photo changes and cleared when it is removed. Every admin payload that names a player carries `photo`: `/api/admin/players/{id}/photo?v={photo_at}`, or null. Because the URL changes with the photo, the browser keeps it for a year (`private` — the route needs the cookie, so no shared cache). Photos are for the **organiser's screens only** (O-21): every public payload carries `photo: null`, and there is no public photo route.
 
 ## 7. API routes
 
@@ -920,10 +924,11 @@ Verifying a cookie means splitting off the name, looking it up in `ADMIN_CODES`,
 | Method + route | Returns | Cookie |
 | --- | --- | --- |
 | `GET /api/public/bracket` | The current (or most recent non-abandoned) competition: status, current round, `rounds_total`, `buybacks_closed_at`, open slots, and for every round its matches (players, ratings, start, state, `started_at`, `time_limit_minutes`, winner), the boxes awaiting an opponent, all free passes, and `boxes` — every box of the round for the tree view (match, lone player, pass-through, or empty); the winner; `server_now`; and `version` — the competition's `updated_at`, which every write bumps inside its own transaction. A screen keeps a payload only when its `version` is at least the one it shows (same competition), so a refresh answered from before a save, or two replies crossing in the air, never replace a newer bracket with an older one. `Cache-Control: s-maxage=5, stale-while-revalidate=10`. | No |
-| `GET /api/public/players` | All **active** players with ratings and `photo` (6.6). | No |
-| `GET /api/public/players/{id}/photo?v=…` | The player's photo bytes with their type; `404` without one. `Cache-Control: public, max-age=31536000, s-maxage=31536000, immutable` — safe because a new photo is a new URL (6.6). | No |
+| `GET /api/public/players` | All **active** players with ratings, by public name, `photo: null` (O-21). | No |
 
-The `s-maxage=5` cache is a **cost control**, not a nicety — see CLAUDE.md. The admin bracket calls the same payload via `GET /api/admin/bracket` (cookie required, uncached) so the organiser is never behind the CDN.
+Both public routes name players by their public name (3.2) and carry no photos (O-21); public names are worked out over the active club list plus the night's players, so a player reads the same on the bracket and the Players tab.
+
+The `s-maxage=5` cache is a **cost control**, not a nicety — see CLAUDE.md. The admin bracket calls the same payload with full names and photos via `GET /api/admin/bracket` (cookie required, uncached) so the organiser is never behind the CDN.
 
 ### 7.3 Players and ratings (§13)
 
@@ -933,6 +938,7 @@ The `s-maxage=5` cache is a **cost control**, not a nicety — see CLAUDE.md. Th
 | `POST /api/admin/players` | `{ name, rating }` | Name 1–60 chars, unique; rating integer −100–200 (negatives allowed). Writes the player and an initial rating change attributed to the session (O-8). |
 | `PATCH /api/admin/players/{id}` | any of `{ name, rating, reason, active }` | Name 1–60 chars, unique ignoring case (`409` naming the clash); a rename writes an `admin_actions` row (action `rename_player`, no competition). Rating integer −100–200; a change writes a `rating_changes` row. `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
 | `GET /api/admin/players/{id}/rating-history` | — | — |
+| `GET /api/admin/players/{id}/photo?v=…` | — | The photo bytes with their type; `404` without one. `Cache-Control: private, max-age=31536000, immutable` (6.6). |
 | `PUT /api/admin/players/{id}/photo` | The image bytes; `Content-Type` `image/jpeg`, `image/png` or `image/webp` | At most 300 KB, and the bytes must carry that type's signature (`400` otherwise). Replaces any photo and sets `photo_at` (6.6, O-18). Returns the player with `photo`. |
 | `DELETE /api/admin/players/{id}/photo` | — | Removes the photo (the player stays — there is still no player `DELETE`, O-9). |
 | `GET /api/admin/competitions/{id}/rating-review` | — | Competition must be `complete`. Returns every player in finishing order with `reached_round`, current rating and the proposal from 5.9. |
@@ -1026,8 +1032,9 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 | O-15 | When the buy-back window closes | **Only on the organiser's tap.** Entries are accepted until **No More Buy-Backs / Late Entries** is pressed — even after every round-one match has been played. That tap gives every lone round-one player their free pass (O-4) and locks the list. Nothing closes it automatically. | 3.4, 3.5, 4.1, 4.2, 5.3, 7.5 |
 | O-16 | Nights that run out of time | **A night ended early counts as "completed (unfinished)".** The organiser taps **End night here**; the night becomes `complete` with **no winner**, keeps every result, appears in history and opens its rating review as usual. Abandon (O-7) stays what it is: a night that should not count at all. | 3.4, 3.8, 3.11, 5.9, 5.11, 7.4 |
 | O-17 | Moving a player on the override screen | **Round one, players who have not played, open seats only.** The override tree lets the organiser move a player waiting in round one, or in a not-started round-one match, to any open place — dragging with a mouse (the screen is mostly used on a computer) or clicking the player then the seat. Both confirm first. Later rounds follow from the round-one slot (O-14), so they are never moved directly. | 3.9, 5.10, 7.6 |
-| O-18 | Player photos | **Optional, public, stored in the database.** An organiser adds a photo on the Players edit sheet from the phone's camera or gallery; it is cropped square and shrunk on the phone. It shows small beside the name in the tree, the lists and the players tables, and large when a match is opened; initials stand in without one. Photos are visible on the public page, so add one only with the member's agreement. | 3.2, 3.8, 6.6, 7.2, 7.3 |
+| O-18 | Player photos | **Optional, stored in the database, organiser's screens only (O-21).** An organiser adds a photo on the Players edit sheet from the phone's camera or gallery; it is cropped square and shrunk on the phone. It shows small beside the name in the tree, the lists and the players tables, and large when a match is opened; initials stand in without one. ~~Photos are visible on the public page~~ — withdrawn from the public page by O-21; photos now show on the organiser's screens only. | 3.2, 3.8, 6.6, 7.2, 7.3 |
 | O-19 | The time-up sound | **A beeping alarm, not a voice.** Three bursts of three sharp beeps, made in the browser so there is no sound file to host. Easier to pick out across a noisy room than a spoken "Match timed out". **Test sound** beside the Sound switch plays it once. | 3.6, 4.1, 5.12 |
+| O-21 | Privacy on the public site | **First name and surname initial, no photos.** The public page shows "Gabriel S.", a bracketed nickname standing in for the first name; names that would read the same grow to three surname letters, and a clash left after that is the organiser's to fix by editing a name (a warning on 3.2 names them). Photos stay on the organiser's screens; the public site shows initials on the player's colour. Built on the server, so nothing private leaves on a public route. | 2, 3.2, 3.8, 6.6, 7.2 |
 
 ### 10.1 Still worth a word from the organiser
 

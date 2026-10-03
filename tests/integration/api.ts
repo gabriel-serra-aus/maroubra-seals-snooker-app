@@ -8,7 +8,6 @@ import * as players from "@/app/api/admin/players/route";
 import * as playerById from "@/app/api/admin/players/[id]/route";
 import * as ratingHistory from "@/app/api/admin/players/[id]/rating-history/route";
 import * as playerPhoto from "@/app/api/admin/players/[id]/photo/route";
-import * as publicPhoto from "@/app/api/public/players/[id]/photo/route";
 import * as competitions from "@/app/api/admin/competitions/route";
 import * as competitionById from "@/app/api/admin/competitions/[id]/route";
 import * as entries from "@/app/api/admin/competitions/[id]/entries/route";
@@ -97,7 +96,7 @@ export const api = {
   patchPlayer: (id: string, body: unknown) => call<{ player: { id: string; rating: number; active: boolean } }>(playerById.PATCH, "PATCH", `/api/admin/players/${id}`, { body, params: { id } }),
   putPhoto: (id: string, bytes: Uint8Array, type: string, auth = true) => sendBytes(playerPhoto.PUT, "PUT", `/api/admin/players/${id}/photo`, { id }, bytes, type, auth),
   deletePhoto: (id: string) => call<{ player: { photo: string | null } }>(playerPhoto.DELETE, "DELETE", `/api/admin/players/${id}/photo`, { params: { id } }),
-  publicPhoto: (id: string) => sendBytes(publicPhoto.GET, "GET", `/api/public/players/${id}/photo`, { id }, undefined, undefined, false),
+  getPhoto: (id: string, auth = true) => sendBytes(playerPhoto.GET, "GET", `/api/admin/players/${id}/photo`, { id }, undefined, undefined, auth),
   ratingHistory: (id: string) => call<{ history: Array<{ old_rating: number | null; new_rating: number; changed_by: string }> }>(ratingHistory.GET, "GET", `/api/admin/players/${id}/rating-history`, { params: { id } }),
   competitions: () => call<{ competitions: Array<{ id: string; status: string; rating_top_count: number }> }>(competitions.GET, "GET", "/api/admin/competitions"),
   createCompetition: (body: unknown = {}) =>
