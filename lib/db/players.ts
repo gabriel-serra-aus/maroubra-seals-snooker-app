@@ -1,6 +1,7 @@
 // The club list (rules 13, O-9): players are never deleted, ratings carry a full history.
 
 import type { Queryable } from "./client";
+import { insertAdminActions } from "./adminActions";
 import { AppError, conflict, notFound } from "@/lib/logic/errors";
 
 export interface PlayerRecord {
@@ -59,14 +60,24 @@ export async function createPlayer(q: Queryable, name: string, rating: number, c
 }
 
 export interface PlayerPatch {
+  name?: string;
   rating?: number;
   reason?: string;
   active?: boolean;
 }
 
-/** Rating override and activate/deactivate (spec 7.3). Deactivation is refused while they are in a live night (O-9). */
+/**
+ * Rename, rating override and activate/deactivate (spec 7.3). A rename keeps names unique ignoring case and is
+ * logged naming the organiser (O-8). Deactivation is refused while they are in a live night (O-9).
+ */
 export async function updatePlayer(q: Queryable, id: string, patch: PlayerPatch, changedBy: string): Promise<PlayerRecord> {
   const player = await getPlayer(q, id);
+  if (patch.name !== undefined && patch.name !== player.name) {
+    const clash = await q.query("select 1 from players where lower(name) = lower($1) and id <> $2", [patch.name, id]);
+    if (clash.length) throw conflict(`Another player is already called ${patch.name}`);
+    await q.query("update players set name = $2, updated_at = now() where id = $1", [id, patch.name]);
+    await insertAdminActions(q, null, changedBy, [{ action: "rename_player", details: { player_id: id, from: player.name, to: patch.name } }]);
+  }
   if (patch.rating !== undefined && patch.rating !== player.rating) {
     await insertRatingChange(q, {
       player_id: id, competition_id: null, old_rating: player.rating, new_rating: patch.rating, changed_by: changedBy, reason: patch.reason ?? null,

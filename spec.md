@@ -152,7 +152,7 @@ Shows every active player's name and rating, inactive players behind a toggle, a
 | Action | What happens |
 | --- | --- |
 | Add player | Name and starting rating. The first rating is recorded as a rating change so its origin is in the history. |
-| Edit → Save | Overrides the rating. A history row records old value, new value, the signed-in organiser and the time (O-8). **Changing a rating never changes the start of a match already created tonight** (5.6). |
+| Edit → Save | Renames the player and/or overrides the rating. A new name must still be unique, ignoring case; a rename keeps every result and the rating history, and writes an `admin_actions` row naming the organiser (O-8). A rating change writes a history row recording old value, new value, the signed-in organiser and the time (O-8). **Changing a rating never changes the start of a match already created tonight** (5.6). |
 | Active / Inactive | Deactivating hides the player from the entry list and the public list, and blocks them from being entered. Neither direction touches their history. A player in tonight's competition cannot be deactivated until the night is complete or abandoned. |
 | Photo (O-18) | On the edit sheet: **Take / choose photo** opens the phone's camera or gallery; the phone crops the centre square, shrinks it to 320 pixels and uploads it at once (no Save needed). **Change photo** replaces it and **Remove photo** takes it away. Every list shows the photo small beside the name, or the player's initials on a colour of their own when there is none. |
 
@@ -931,7 +931,7 @@ The `s-maxage=5` cache is a **cost control**, not a nicety — see CLAUDE.md. Th
 | --- | --- | --- |
 | `GET /api/admin/players` | `?include_inactive=1` | — |
 | `POST /api/admin/players` | `{ name, rating }` | Name 1–60 chars, unique; rating integer −100–200 (negatives allowed). Writes the player and an initial rating change attributed to the session (O-8). |
-| `PATCH /api/admin/players/{id}` | any of `{ rating, reason, active }` | Rating integer −100–200; a change writes a `rating_changes` row. `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
+| `PATCH /api/admin/players/{id}` | any of `{ name, rating, reason, active }` | Name 1–60 chars, unique ignoring case (`409` naming the clash); a rename writes an `admin_actions` row (action `rename_player`, no competition). Rating integer −100–200; a change writes a `rating_changes` row. `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
 | `GET /api/admin/players/{id}/rating-history` | — | — |
 | `PUT /api/admin/players/{id}/photo` | The image bytes; `Content-Type` `image/jpeg`, `image/png` or `image/webp` | At most 300 KB, and the bytes must carry that type's signature (`400` otherwise). Replaces any photo and sets `photo_at` (6.6, O-18). Returns the player with `photo`. |
 | `DELETE /api/admin/players/{id}/photo` | — | Removes the photo (the player stays — there is still no player `DELETE`, O-9). |

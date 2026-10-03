@@ -155,6 +155,7 @@ function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) =>
 }
 
 function EditSheet({ p, signedInAs, onClose, onSaved, onPhoto }: { p: ClubPlayer; signedInAs: string; onClose: () => void; onSaved: () => Promise<void>; onPhoto: (p: ClubPlayer) => void }) {
+  const [name, setName] = useState(p.name);
   const [rating, setRating] = useState(String(p.rating));
   const [reason, setReason] = useState("");
   const [active, setActive] = useState(p.active);
@@ -167,7 +168,8 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onPhoto }: { p: ClubPlayer
     run(async () => {
       const r = Number(rating);
       if (!Number.isInteger(r)) throw new Error("Rating must be a whole number");
-      await patch(`/api/admin/players/${p.id}`, { rating: r, reason: reason.trim() || undefined, active });
+      if (!name.trim()) throw new Error("Enter a name");
+      await patch(`/api/admin/players/${p.id}`, { name: name.trim(), rating: r, reason: reason.trim() || undefined, active });
       await onSaved();
     });
   return (
@@ -175,6 +177,10 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onPhoto }: { p: ClubPlayer
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <h2>{p.name}</h2>
         <PhotoField p={p} onPhoto={onPhoto} />
+        <label className="field">
+          <span>Name</span>
+          <input type="text" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
         <label className="field">
           <span>Rating</span>
           <input type="number" value={rating} onChange={(e) => setRating(e.target.value)} />
