@@ -5,7 +5,7 @@ export function json(data: unknown, init?: ResponseInit): Response {
 }
 
 export function errorResponse(err: unknown): Response {
-  if (err instanceof AppError) return Response.json({ error: err.message }, { status: err.status });
+  if (err instanceof AppError) return Response.json({ ...err.extra, error: err.message }, { status: err.status });
   console.error(err);
   return Response.json({ error: "Internal error" }, { status: 500 });
 }

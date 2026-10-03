@@ -14,7 +14,7 @@ import { MatchCard, actionKey, matchOfKey, type MatchActions } from "./MatchCard
 import { TablePicker, TableStrip, tableStates, type TableClaims } from "./Tables";
 import { PlayerFinder } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
-import { get, patch, post } from "./client/api";
+import { ApiError, get, patch, post } from "./client/api";
 import { roundName } from "./client/format";
 import { useAction, usePoll, useServerClock, useStoredChoice, useWideScreen } from "./client/hooks";
 import { playAlarm, unlockSound, useSound, useTimeoutAlert } from "./client/sound";
@@ -121,11 +121,30 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
     });
   };
 
-  /** A result from the dialog (spec 3.5): the dialog closes at once and the card carries the spinner. */
+  /**
+   * A result from the dialog (spec 3.5): the dialog closes at once and the card carries the spinner.
+   * When the only open seats would put a buy-back in line for a rematch in round two, the server asks
+   * first (O-20): the organiser allows it, or the player does not buy back.
+   */
   const submitResult = (m: MatchView, mode: "complete" | "correct", body: CompleteRequest, describe: (r: CompleteReply) => string | null) => {
     setDialog(null);
     void run(async () => {
-      const r = await post<CompleteReply>(`/api/admin/matches/${m.id}/${mode}`, body);
+      let r: CompleteReply;
+      try {
+        r = await post<CompleteReply>(`/api/admin/matches/${m.id}/${mode}`, body);
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.body.code !== "rematch") throw e;
+        const { player, opponent } = e.body as { player: string; opponent: string };
+        const allow = await ask({
+          title: "Same opponent in round 2?",
+          body: `The only open seats put ${player} in line to meet ${opponent} again in round 2.`,
+          points: [`Allow: ${player} buys back into one of those seats.`, `Don't buy back: ${player} is out.`],
+          note: "Review result can change either answer while the match has not started.",
+          confirm: "Allow",
+          cancel: "Don't buy back",
+        });
+        r = await post<CompleteReply>(`/api/admin/matches/${m.id}/${mode}`, allow ? { ...body, allow_rematch: true } : { ...body, loser_decision: "declined" });
+      }
       setNotice(describe(r));
       setData(r.bracket);
     }, actionKey(mode, m));

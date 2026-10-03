@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addLateArrival, closeBuybacks } from "@/lib/logic/buybacks";
 import { completeMatch } from "@/lib/logic/matchControl";
+import { cloneSnapshot } from "@/lib/logic/types";
 import { halfFullPairs, matchNumberForSlot, mateSlot, openSlots, positionOf, waitingEntries } from "@/lib/logic/derive";
 import { entry, hasMatch, makeCtx, match, nameOf, play, slotEntry, startNight, startOn } from "./helpers";
 
@@ -155,7 +156,10 @@ describe("late arrivals (rules 3, 8.3): flagged late, not buy-back, and still en
     startOn(s, ctx, m.id);
     const other = m.player_a_id === late.id ? m.player_b_id : m.player_a_id;
     expect(() => completeMatch(s, ctx, m.id, other)).toThrow(/loser_decision is required/);
-    const r = completeMatch(s, ctx, m.id, other, "bought_back");
+    // The one seat left (M7 or M8) shares their round-two box: the organiser has to allow the rematch (O-20).
+    // The route's transaction rolls a refusal back; here a copy takes the throw.
+    expect(() => completeMatch(cloneSnapshot(s), ctx, m.id, other, "bought_back")).toThrow(/again in round 2/);
+    const r = completeMatch(s, ctx, m.id, other, "bought_back", true);
     expect(r.loser.decision).toBe("bought_back");
     const bb = entry(s, r.loser.buybackEntryId!);
     expect(bb.source).toBe("buyback");

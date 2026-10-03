@@ -76,8 +76,11 @@ function validateDecision(s: Snapshot, m: MatchRow, loser: EntryRow, decision: L
   }
 }
 
-/** Records the loser's decision; `no_slots` when they wanted to buy back but the bracket was full (O-3). */
-function applyLoserDecision(s: Snapshot, ctx: Ctx, m: MatchRow, loser: EntryRow, decision: LoserDecision | undefined): DecisionOutcome {
+/**
+ * Records the loser's decision; `no_slots` when they wanted to buy back but the bracket was full (O-3).
+ * `allowRematch`: the organiser said yes to a seat in the round-one opponent's half (O-20).
+ */
+function applyLoserDecision(s: Snapshot, ctx: Ctx, m: MatchRow, loser: EntryRow, decision: LoserDecision | undefined, allowRematch = false): DecisionOutcome {
   if (!loserEligibleForBuyback(s, m, loser)) {
     if (decision !== undefined) throw badRequest("No buy-back decision applies to this loser");
     return { decision: null, buybackEntryId: null, buybackMatch: null };
@@ -91,7 +94,7 @@ function applyLoserDecision(s: Snapshot, ctx: Ctx, m: MatchRow, loser: EntryRow,
     loser.buyback_decision = "no_slots";
     return { decision: "no_slots", buybackEntryId: null, buybackMatch: null };
   }
-  const { entry, match } = createBuybackEntry(s, ctx, loser.player_id, loser.id);
+  const { entry, match } = createBuybackEntry(s, ctx, loser.player_id, loser.id, { allowRematch });
   loser.buyback_decision = "bought_back";
   return { decision: "bought_back", buybackEntryId: entry.id, buybackMatch: match };
 }
@@ -105,7 +108,7 @@ export interface CompleteResult {
 }
 
 /** Complete (rules 12, spec 3.5): winner recorded, clock stopped, winner advanced, loser's decision applied. */
-export function completeMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: string, decision?: LoserDecision): CompleteResult {
+export function completeMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: string, decision?: LoserDecision, allowRematch = false): CompleteResult {
   const m = getMatch(s, matchId);
   if (m.state === "not_started") throw conflict("A result cannot be entered on a match that has not started");
   if (m.state === "finished") throw conflict(`${matchLabel(s, m)} is already finished — use Review result`);
@@ -115,7 +118,7 @@ export function completeMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: 
   m.state = "finished";
   m.finished_at = ctx.now;
   m.winner_id = winnerId;
-  const loserOutcome = applyLoserDecision(s, ctx, m, loser, decision);
+  const loserOutcome = applyLoserDecision(s, ctx, m, loser, decision, allowRematch);
   // The buy-back window is untouched by a result: only the organiser's tap closes it (O-15).
   advanceAll(s, ctx);
   return { match: m, loser: loserOutcome, winnerTo: advancementOf(s, winnerId, m.round), completed: s.competition.status === "complete" };
@@ -153,7 +156,7 @@ function releaseBuyback(s: Snapshot, ctx: Ctx, loser: EntryRow): void {
  * winner, undo the previous loser's buy-back if it has not started (O-6), take the new loser's decision,
  * then let the advancement step move the new winner into the same place.
  */
-export function correctMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: string, decision?: LoserDecision): CompleteResult {
+export function correctMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: string, decision?: LoserDecision, allowRematch = false): CompleteResult {
   const m = getMatch(s, matchId);
   if (m.state !== "finished" || !m.winner_id) throw conflict("Only a finished match can be corrected");
   if (winnerId !== m.player_a_id && winnerId !== m.player_b_id) throw badRequest("The winner must be a player of the match");
@@ -174,7 +177,7 @@ export function correctMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: s
       loserOutcome = { decision: "declined", buybackEntryId: null, buybackMatch: null };
     } else if (wants === "bought_back" && had !== "bought_back") {
       prevLoser.buyback_decision = null;
-      loserOutcome = applyLoserDecision(s, ctx, m, prevLoser, "bought_back");
+      loserOutcome = applyLoserDecision(s, ctx, m, prevLoser, "bought_back", allowRematch);
     }
   } else {
     unwindAdvance(s, ctx, prevWinner, m.round, { force: false });
@@ -182,7 +185,7 @@ export function correctMatch(s: Snapshot, ctx: Ctx, matchId: string, winnerId: s
     prevLoser.buyback_decision = null;
     m.winner_id = winnerId;
     const newLoser = entryById(s, prevWinner);
-    loserOutcome = applyLoserDecision(s, ctx, m, newLoser, decision);
+    loserOutcome = applyLoserDecision(s, ctx, m, newLoser, decision, allowRematch);
   }
   m.corrected_at = ctx.now;
   advanceAll(s, ctx);

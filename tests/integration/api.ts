@@ -121,6 +121,7 @@ export const api = {
   cancelStart: (id: string) => call<{ bracket: BracketPayload }>(matchCancel.POST, "POST", `/api/admin/matches/${id}/cancel-start`, { params: { id } }),
   complete: (id: string, winner_entry_id: string, loser_decision?: string) =>
     call<CompleteReply>(matchComplete.POST, "POST", `/api/admin/matches/${id}/complete`, { body: { winner_entry_id, loser_decision }, params: { id } }),
+  completeWith: (id: string, body: Record<string, unknown>) => call<CompleteReply & { code?: string; player?: string; opponent?: string }>(matchComplete.POST, "POST", `/api/admin/matches/${id}/complete`, { body, params: { id } }),
   correct: (id: string, winner_entry_id: string, loser_decision?: string) =>
     call<CompleteReply>(matchCorrect.POST, "POST", `/api/admin/matches/${id}/correct`, { body: { winner_entry_id, loser_decision }, params: { id } }),
   ov: {

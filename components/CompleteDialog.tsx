@@ -18,6 +18,8 @@ export interface CompleteReply {
 export interface CompleteRequest {
   winner_entry_id: string;
   loser_decision?: "bought_back" | "declined";
+  /** The organiser allowed a buy-back seat in the round-one opponent's half (O-20). */
+  allow_rematch?: boolean;
 }
 
 type Decision = "bought_back" | "declined";

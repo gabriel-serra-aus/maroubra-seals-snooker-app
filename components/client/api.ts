@@ -1,5 +1,17 @@
 "use client";
 
+/** A refused request, carrying the server's whole reply: some refusals are a question (`code`, O-20). */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly body: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 /** fetch wrapper for the admin API: JSON (or a Blob, sent as-is: a photo) in, JSON out, throws the server's error message. */
 export async function call<T = Record<string, unknown>>(method: string, path: string, body?: unknown): Promise<T> {
   const blob = body instanceof Blob;
@@ -17,7 +29,7 @@ export async function call<T = Record<string, unknown>>(method: string, path: st
     window.location.href = "/admin/login";
     throw new Error("Not signed in");
   }
-  if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(data.error ?? `Request failed (${res.status})`, res.status, data);
   return data;
 }
 

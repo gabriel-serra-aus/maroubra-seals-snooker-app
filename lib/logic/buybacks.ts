@@ -3,10 +3,12 @@
 
 import { badRequest, conflict } from "./errors";
 import {
+  boxOf,
   buybackEntryOf,
   buybacksOpen,
   firstEntryOf,
   openSlots,
+  pickFreeSlot,
   playerRating,
   positionOf,
 } from "./derive";
@@ -21,23 +23,47 @@ function nextBuybackSeq(s: Snapshot): number {
 }
 
 /**
+ * The seat a buy-back takes (spec 5.2, O-20): the placement rule, but never a seat that would put them in
+ * line to meet their round-one opponent again in round two — by winning or by a free pass. Those seats
+ * share the round-two box of the slot they lost from. Only when nothing else is open does a rematch seat
+ * come into play, and then only once the organiser has allowed it: until then this throws a 409 with
+ * `code: "rematch"` naming the opponent, which the screen turns into a question. Undefined means "let
+ * placeInSlot pick", which then can only land on a rematch seat.
+ */
+function buybackSlot(s: Snapshot, ctx: Ctx, playerId: string, firstLife: EntryRow | undefined, allowRematch: boolean): number | undefined {
+  if (firstLife?.slot == null) return undefined;
+  const box = boxOf(firstLife.slot, 2);
+  const slot = pickFreeSlot(s, ctx.rng, (x) => boxOf(x, 2) === box);
+  if (slot !== undefined || allowRematch || pickFreeSlot(s, ctx.rng) === undefined) return slot;
+  const lost = s.matches.find((m) => m.round === 1 && m.winner_id !== null && (m.player_a_id === firstLife.id || m.player_b_id === firstLife.id));
+  const winner = lost && s.entries.find((e) => e.id === lost.winner_id);
+  const name = (id: string | undefined) => s.players.find((p) => p.id === id)?.name ?? "?";
+  const player = name(playerId);
+  const opponent = name(winner?.player_id);
+  throw conflict(`The only open seats put ${player} in line to meet ${opponent} again in round 2`, { code: "rematch", player, opponent });
+}
+
+/**
  * Creates a buy-back entry for a player: a round-one loser re-entering (rebuyOf = their first-life entry,
  * draw or late; null only from the override). Consumes one open slot (O-3) and is placed into the bracket at once, per
- * the placement rule of spec 5.2 (a random empty match first, then beside a random lone player). Guards
- * are the normal ones; the override passes `force` and its own `slot`.
+ * the placement rule of spec 5.2 (a random empty match first, then beside a random lone player), away from
+ * their round-one opponent's half unless the organiser allowed it (O-20). Guards are the normal ones; the
+ * override passes `force` and its own `slot`, and is not checked for a rematch.
  */
 export function createBuybackEntry(
   s: Snapshot,
   ctx: Ctx,
   playerId: string,
   rebuyOfEntryId: string | null,
-  opts: { force?: boolean; slot?: number } = {},
+  opts: { force?: boolean; slot?: number; allowRematch?: boolean } = {},
 ): { entry: EntryRow; match: MatchRow | null } {
   if (!opts.force) {
     if (!buybacksOpen(s)) throw conflict("Buy-backs are closed");
     if (openSlots(s) <= 0) throw conflict("No open slots left");
   }
   if (buybackEntryOf(s, playerId)) throw conflict("That player has already bought back tonight");
+  const firstLife = s.entries.find((e) => e.id === rebuyOfEntryId);
+  const slot = opts.force ? opts.slot : buybackSlot(s, ctx, playerId, firstLife, opts.allowRematch ?? false);
   const entry: EntryRow = {
     id: ctx.newId(),
     competition_id: s.competition.id,
@@ -52,7 +78,7 @@ export function createBuybackEntry(
     entered_at: ctx.now,
   };
   s.entries.push(entry);
-  const match = placeInSlot(s, ctx, entry, opts.force ? "override" : "placement", opts.slot);
+  const match = placeInSlot(s, ctx, entry, opts.force ? "override" : "placement", slot);
   return { entry, match };
 }
 

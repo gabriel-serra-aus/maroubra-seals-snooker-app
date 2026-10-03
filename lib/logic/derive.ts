@@ -147,18 +147,23 @@ export function entryAtSlot(s: Snapshot, slot: number): EntryRow | undefined {
 
 /**
  * Where the next buy-back or late arrival goes (spec 5.2, O-13): a random empty match while one exists,
- * otherwise a random free seat beside a lone round-one player, first-draw or buy-back alike.
+ * otherwise a random free seat beside a lone round-one player, first-draw or buy-back alike. Seats for
+ * which `avoid` is true are left out (a buy-back's rematch seats, O-20).
  */
-export function pickFreeSlot(s: Snapshot, rng: Rng): number | undefined {
+export function pickFreeSlot(s: Snapshot, rng: Rng, avoid: (slot: number) => boolean = () => false): number | undefined {
   const B = s.competition.bracket_size;
   const emptyPairs: number[] = [];
   const loneSeats: number[] = [];
   for (let k = 1; k <= B / 2; k++) {
     const a = entryAtSlot(s, 2 * k - 1);
     const b = entryAtSlot(s, 2 * k);
-    if (!a && !b) emptyPairs.push(2 * k - 1);
-    else if (!a && b && isWaitingIn(s, b.id, 1)) loneSeats.push(2 * k - 1);
-    else if (!b && a && isWaitingIn(s, a.id, 1)) loneSeats.push(2 * k);
+    if (!a && !b) {
+      if (!avoid(2 * k - 1)) emptyPairs.push(2 * k - 1);
+    } else if (!a && b && isWaitingIn(s, b.id, 1)) {
+      if (!avoid(2 * k - 1)) loneSeats.push(2 * k - 1);
+    } else if (!b && a && isWaitingIn(s, a.id, 1)) {
+      if (!avoid(2 * k)) loneSeats.push(2 * k);
+    }
   }
   if (emptyPairs.length) return shuffle(emptyPairs, rng)[0];
   if (loneSeats.length) return shuffle(loneSeats, rng)[0];
