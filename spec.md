@@ -117,7 +117,7 @@ The app runs one snooker competition on one night. Before the night, the organis
 - There are **several admin codes, one per organiser, each with a name** (O-8). The name attached to the code that was used is recorded as "changed by" on every rating change (§13) and as the actor on every override. No accounts, no password resets, no email: the code *is* the identity.
 - The organiser stays logged in until the cookie expires or **their** code changes. Each cookie is signed with the code that created it, so changing one person's code logs out only that person (7.1).
 - The public page **never** changes anything. Every change is checked on the server, not just hidden in the interface.
-- More than one device can be logged in at once, with the same code or different ones.
+- More than one device can be logged in at once, with the same code or different ones. A tap made on a screen that has not yet seen another device's change is refused and the screen shows the latest bracket, naming who changed it (7.8, O-22).
 
 ## 3. Screens
 
@@ -807,6 +807,8 @@ There is no delete route and no `on delete cascade` pointing at this table: hist
 | winner_entry_id | uuid | FK → entries, nullable — **null on a night ended early** (O-16) |
 | created_at | timestamptz | not null, default now() |
 | updated_at | timestamptz | not null, default now(). Bumped by every write to the night inside its transaction; the bracket JSON carries it as `version` (7.2) |
+| updated_by | text | null. The organiser behind that last write — named when another device's write is refused (7.8, O-22) |
+| updated_by_client | text | null. The device (one random id per open tab) behind that last write (7.8) |
 
 At most one competition may be `setup` or `in_progress` at a time: partial unique index on a constant, `((1)) where status in ('setup','in_progress')`. Abandoning (5.11) frees it immediately.
 
@@ -941,7 +943,7 @@ The `s-maxage=5` cache is a **cost control**, not a nicety — see CLAUDE.md. Th
 | --- | --- | --- |
 | `GET /api/admin/players` | `?include_inactive=1` | — |
 | `POST /api/admin/players` | `{ name, rating }` | Name 1–60 chars, unique; rating integer −100–200 (negatives allowed). Writes the player and an initial rating change attributed to the session (O-8). |
-| `PATCH /api/admin/players/{id}` | any of `{ name, rating, reason, active }` | Name 1–60 chars, unique ignoring case (`409` naming the clash); a rename writes an `admin_actions` row (action `rename_player`, no competition). Rating integer −100–200; a change writes a `rating_changes` row. `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
+| `PATCH /api/admin/players/{id}` | any of `{ expected_updated_at, name, rating, reason, active }` | Name 1–60 chars, unique ignoring case (`409` naming the clash); a rename writes an `admin_actions` row (action `rename_player`, no competition). `expected_updated_at` (the edit sheet sends the player's `updated_at` from when it opened) that no longer matches is refused with `409` `{ code: "stale" }` (7.8). Rating integer −100–200; a change writes a `rating_changes` row. `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
 | `GET /api/admin/players/{id}/rating-history` | — | — |
 | `GET /api/admin/players/{id}/photo?v=…` | — | The photo bytes with their type; `404` without one. `Cache-Control: private, max-age=31536000, immutable` (6.6). |
 | `PUT /api/admin/players/{id}/photo` | The image bytes; `Content-Type` `image/jpeg`, `image/png` or `image/webp` | At most 300 KB, and the bytes must carry that type's signature (`400` otherwise). Replaces any photo and sets `photo_at` (6.6, O-18). Returns the player with `photo`. |
@@ -1006,6 +1008,16 @@ Every route here is a normal admin route with the state guards removed, and ever
 | --- | --- | --- |
 | `GET /api/cron/ping` | Header `Authorization: Bearer ${CRON_SECRET}`, sent by the Netlify scheduled function. Runs `select 1`. Keeps the free-tier database from pausing. | No (secret header instead) |
 
+### 7.8 Two organisers at once (O-22)
+
+Writes to a night are already serialised by the competition row lock (spec 7), so two taps never corrupt the bracket. This section stops one organiser overwriting a change they have not seen.
+
+- **Every write from a screen says what it shows.** The admin screens send `x-client-id` (a random id made when the tab opens) and `x-bracket-version: {competition id}@{version}` — the `version` (7.2) of the bracket on screen, moved forward by every poll and every reply.
+- **The server compares under the lock.** If the night's `updated_at` is newer than the version sent, and the last write came from another device (`updated_by_client`), the write is refused with `409` `{ code: "stale", by, at, bracket }` and nothing changes. The message names the organiser: "Gabriel changed the bracket 12 s ago. Here is the latest — check it and tap again." The screen swaps in `bracket` at once; tapping again goes through.
+- **A device's own quick taps pass.** Two Starts tapped before the first reply carry the same version but come from the same device, which already knows what it did, so the second is not refused and the club phone still serves the next table while one saves (3.4).
+- A request without the header (scripts, tests), or naming another competition, is not checked. Dry runs (7.6) are checked like the write they preview.
+- **Player edits** carry `expected_updated_at` (7.3): a sheet opened before someone else saved that player is refused, the list reloads and says so, and nothing is overwritten.
+
 ## 8. Deployment
 
 **Moved to [CLAUDE.md](CLAUDE.md)** — hosting, environment variables and the deploy steps are infrastructure, not behaviour. `ADMIN_CODES` and the rest are documented there.
@@ -1041,6 +1053,7 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 | O-19 | The time-up sound | **A beeping alarm, not a voice.** Three bursts of three sharp beeps, made in the browser so there is no sound file to host. Easier to pick out across a noisy room than a spoken "Match timed out". **Test sound** beside the Sound switch plays it once. | 3.6, 4.1, 5.12 |
 | O-20 | A buy-back meeting the same opponent again | **Not in round two, unless the organiser allows it.** A buy-back is placed away from the half of the bracket where they would meet the player who beat them again in round two — that beats O-13's "empty match first". If every open seat is there, the app asks: allow it, or the player doesn't buy back. Free passes count (a pass into that player is the same rematch); round three onwards is fair; late arrivals, Force Pair and the override are not checked. | 3.5, 5.2, 5.13, 7.5 |
 | O-21 | Privacy on the public site | **First name and surname initial, no photos.** The public page shows "Gabriel S.", a bracketed nickname standing in for the first name; names that would read the same grow to three surname letters, and a clash left after that is the organiser's to fix by editing a name (a warning on 3.2 names them). Photos stay on the organiser's screens; the public site shows initials on the player's colour. Built on the server, so nothing private leaves on a public route. | 2, 3.2, 3.8, 6.6, 7.2 |
+| O-22 | Two organisers on different phones or tabs | **Refuse the write that would overwrite an unseen change** (option B, a version check). Simple, and conflicts are rare: the admin bracket refreshes every 5 seconds. The refused screen shows the latest bracket and who changed it; the organiser taps again. A device's own quick taps are never refused. Player edits are checked the same way. | 2, 6.3, 7.3, 7.8 |
 
 ### 10.1 Still worth a word from the organiser
 

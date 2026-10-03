@@ -47,9 +47,9 @@ export async function call<T = Record<string, unknown>>(
   handler: Handler,
   method: string,
   path: string,
-  opts: { body?: unknown; params?: Record<string, string>; auth?: boolean } = {},
+  opts: { body?: unknown; params?: Record<string, string>; auth?: boolean; headers?: Record<string, string> } = {},
 ): Promise<Reply<T>> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...opts.headers };
   if (opts.auth !== false && cookie) headers.cookie = cookie;
   if (opts.body !== undefined) headers["content-type"] = "application/json";
   const req = new Request(`http://test.local${path}`, {
@@ -117,6 +117,11 @@ export const api = {
   saveRatingReview: (id: string, changes: Array<{ player_id: string; new_rating: number }>) => call<{ written: number }>(ratingReview.POST, "POST", `/api/admin/competitions/${id}/rating-review`, { body: { changes }, params: { id } }),
   adminActions: (id: string) => call<{ actions: Array<{ actor: string; action: string; details: Record<string, unknown> }> }>(adminActions.GET, "GET", `/api/admin/competitions/${id}/admin-actions`, { params: { id } }),
   patchMatch: (id: string, body: unknown) => call<{ bracket: BracketPayload }>(matchById.PATCH, "PATCH", `/api/admin/matches/${id}`, { body, params: { id } }),
+  /** A write as a screen sends it (spec 7.8): which tab, and the bracket version it shows. */
+  startMatchAs: (id: string, body: unknown, headers: Record<string, string>) =>
+    call<{ bracket: BracketPayload; error?: string; code?: string; by?: string | null }>(matchStart.POST, "POST", `/api/admin/matches/${id}/start`, { body, params: { id }, headers }),
+  patchPlayerAs: (id: string, body: unknown, headers: Record<string, string> = {}) =>
+    call<{ player: { id: string; name: string; updated_at: string }; error?: string; code?: string }>(playerById.PATCH, "PATCH", `/api/admin/players/${id}`, { body, params: { id }, headers }),
   startMatch: (id: string, body: unknown = {}) => call<{ started_at: string; time_limit_minutes: number; table_number: number | null; bracket: BracketPayload; error?: string }>(matchStart.POST, "POST", `/api/admin/matches/${id}/start`, { body, params: { id } }),
   cancelStart: (id: string) => call<{ bracket: BracketPayload }>(matchCancel.POST, "POST", `/api/admin/matches/${id}/cancel-start`, { params: { id } }),
   complete: (id: string, winner_entry_id: string, loser_decision?: string) =>

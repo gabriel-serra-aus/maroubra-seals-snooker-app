@@ -34,8 +34,9 @@ export async function listPlayers(q: Queryable, includeInactive: boolean): Promi
   );
 }
 
-export async function getPlayer(q: Queryable, id: string): Promise<PlayerRecord> {
-  const rows = await q.query<PlayerRecord>("select * from players where id = $1", [id]);
+/** One player; `lock` holds the row for the rest of the transaction (an edit, spec 7.8). */
+export async function getPlayer(q: Queryable, id: string, lock = false): Promise<PlayerRecord> {
+  const rows = await q.query<PlayerRecord>(`select * from players where id = $1${lock ? " for update" : ""}`, [id]);
   if (!rows[0]) throw notFound("Player not found");
   return rows[0];
 }
@@ -60,6 +61,8 @@ export async function createPlayer(q: Queryable, name: string, rating: number, c
 }
 
 export interface PlayerPatch {
+  /** The player's `updated_at` when the edit sheet opened: a change since then is refused (spec 7.8, O-22). */
+  expectedUpdatedAt?: string;
   name?: string;
   rating?: number;
   reason?: string;
@@ -71,7 +74,12 @@ export interface PlayerPatch {
  * logged naming the organiser (O-8). Deactivation is refused while they are in a live night (O-9).
  */
 export async function updatePlayer(q: Queryable, id: string, patch: PlayerPatch, changedBy: string): Promise<PlayerRecord> {
-  const player = await getPlayer(q, id);
+  const player = await getPlayer(q, id, true);
+  if (patch.expectedUpdatedAt !== undefined && patch.expectedUpdatedAt !== new Date(player.updated_at).toISOString()) {
+    throw new AppError(409, `${player.name} was changed on another screen since you opened it. It has been reloaded — check it and save again.`, {
+      code: "stale",
+    });
+  }
   if (patch.name !== undefined && patch.name !== player.name) {
     const clash = await q.query("select 1 from players where lower(name) = lower($1) and id <> $2", [patch.name, id]);
     if (clash.length) throw conflict(`Another player is already called ${patch.name}`);

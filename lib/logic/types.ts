@@ -41,6 +41,9 @@ export interface CompetitionRow {
   created_at: Date;
   /** Bumped by every write to the night (lib/api/mutate.ts); the bracket JSON carries it as `version` (spec 7.2). */
   updated_at: Date;
+  /** The organiser and the device (a random id per open tab) behind that last write (spec 7.8, O-22). */
+  updated_by?: string | null;
+  updated_by_client?: string | null;
 }
 
 export interface EntryRow {

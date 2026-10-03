@@ -16,7 +16,7 @@ import { PlayerFinder } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 import { ApiError, get, patch, post } from "./client/api";
 import { roundName } from "./client/format";
-import { useAction, usePoll, useServerClock, useStoredChoice, useWideScreen } from "./client/hooks";
+import { useAction, useBracketScreen, usePoll, useServerClock, useStoredChoice, useWideScreen } from "./client/hooks";
 import { playAlarm, unlockSound, useSound, useTimeoutAlert } from "./client/sound";
 
 type Dialog = { kind: "complete" | "correct"; m: MatchView } | { kind: "match" | "table" | "move"; id: string } | { kind: "add" } | null;
@@ -27,6 +27,7 @@ type WithBracket = { bracket: BracketPayload };
 export function AdminBracket({ initial }: { initial: BracketPayload }) {
   const router = useRouter();
   const { data: b, setData, refresh } = usePoll<BracketPayload>("/api/admin/bracket", 5_000, initial, bracketIsStale);
+  useBracketScreen(b, setData);
   const now = useServerClock(b.server_now);
   const { on: soundOn, toggle: toggleSound } = useSound();
   const allMatches = b.rounds.flatMap((r) => r.matches);

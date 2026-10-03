@@ -6,12 +6,16 @@ import { useState } from "react";
 import type { BracketPayload } from "@/lib/bracket/payload";
 import { Btn } from "./Btn";
 import { patch } from "./client/api";
-import { useAction } from "./client/hooks";
+import { useAction, useBracketScreen } from "./client/hooks";
 
 /** Settings (spec 3.10): the match time limit, the club's tables and the rating-adjustment scale, off the setup page. */
+const ignoreFresh = () => {};
+
 export function SettingsForm({ competition }: { competition: BracketPayload | null }) {
   const router = useRouter();
   const c = competition?.competition ?? null;
+  // Saving after another device changed the night is refused once; tap Save again (spec 7.8).
+  useBracketScreen(competition, ignoreFresh);
   const [form, setForm] = useState({
     default_time_limit_minutes: c?.default_time_limit_minutes ?? 25,
     table_count: c?.table_count ?? 4,

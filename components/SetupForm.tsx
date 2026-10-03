@@ -8,7 +8,7 @@ import { Btn } from "./Btn";
 import { useDialog } from "./Dialog";
 import { del, patch, post } from "./client/api";
 import { fmtRating } from "./client/format";
-import { useAction } from "./client/hooks";
+import { useAction, useBracketScreen } from "./client/hooks";
 import { AddSheet, type ClubPlayer } from "./PlayersAdmin";
 
 export interface SetupDefaults {
@@ -25,6 +25,7 @@ type WithBracket = { bracket: BracketPayload };
 export function SetupForm({ competition, players, defaults }: { competition: BracketPayload | null; players: ClubPlayer[]; defaults: SetupDefaults }) {
   const router = useRouter();
   const [comp, setComp] = useState<BracketPayload | null>(competition);
+  useBracketScreen(comp, setComp);
   const c = comp?.competition ?? null;
   const [name, setName] = useState(c?.name ?? defaults.name);
   const [sizeChoice, setSizeChoice] = useState<number>(c?.bracket_size ?? 16);

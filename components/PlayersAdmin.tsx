@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
 import { Btn } from "./Btn";
 import { CameraCapture } from "./CameraCapture";
-import { del, get, patch, post, put } from "./client/api";
+import { ApiError, del, get, patch, post, put } from "./client/api";
 import { fmtDate, fmtRating } from "./client/format";
 import { useAction } from "./client/hooks";
 import { publicNames } from "@/lib/names";
@@ -15,6 +15,8 @@ export interface ClubPlayer {
   rating: number;
   active: boolean;
   photo: string | null;
+  /** When the player last changed: an edit made from an older copy is refused (spec 7.8, O-22). */
+  updated_at?: string;
 }
 
 interface HistoryRow {
@@ -33,6 +35,7 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState<ClubPlayer | null>(null);
   const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const reload = async () => setPlayers((await get<{ players: ClubPlayer[] }>("/api/admin/players?include_inactive=1")).players);
   const shown = players.filter((p) => (showInactive || p.active) && p.name.toLowerCase().includes(q.trim().toLowerCase()));
   const active = shown.filter((p) => p.active);
@@ -60,6 +63,7 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
           Edit one of the names so they differ — for example add a nickname in brackets, &quot;John Smith (Smithy)&quot;.
         </div>
       ))}
+      {notice && <div className="notice">{notice}</div>}
       <input type="search" placeholder="Search players…" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="row between" style={{ margin: "8px 0" }}>
         <button className="btn" onClick={() => setAdding(true)}>+ Add player</button>
@@ -91,7 +95,8 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
           p={editing}
           signedInAs={signedInAs}
           onClose={() => setEditing(null)}
-          onSaved={async () => { setEditing(null); await reload(); }}
+          onSaved={async () => { setEditing(null); setNotice(null); await reload(); }}
+          onStale={async (msg) => { setEditing(null); setNotice(msg); await reload(); }}
           onPhoto={(updated) => { setEditing(updated); setPlayers((all) => all.map((x) => (x.id === updated.id ? updated : x))); }}
         />
       )}
@@ -191,7 +196,7 @@ function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) =>
   );
 }
 
-function EditSheet({ p, signedInAs, onClose, onSaved, onPhoto }: { p: ClubPlayer; signedInAs: string; onClose: () => void; onSaved: () => Promise<void>; onPhoto: (p: ClubPlayer) => void }) {
+function EditSheet({ p, signedInAs, onClose, onSaved, onStale, onPhoto }: { p: ClubPlayer; signedInAs: string; onClose: () => void; onSaved: () => Promise<void>; onStale: (message: string) => Promise<void>; onPhoto: (p: ClubPlayer) => void }) {
   const [name, setName] = useState(p.name);
   const [rating, setRating] = useState(String(p.rating));
   const [reason, setReason] = useState("");
@@ -206,7 +211,13 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onPhoto }: { p: ClubPlayer
       const r = Number(rating);
       if (!Number.isInteger(r)) throw new Error("Rating must be a whole number");
       if (!name.trim()) throw new Error("Enter a name");
-      await patch(`/api/admin/players/${p.id}`, { name: name.trim(), rating: r, reason: reason.trim() || undefined, active });
+      try {
+        await patch(`/api/admin/players/${p.id}`, { expected_updated_at: p.updated_at, name: name.trim(), rating: r, reason: reason.trim() || undefined, active });
+      } catch (e) {
+        // Changed on another screen since this sheet opened (spec 7.8): show the latest instead of overwriting it.
+        if (e instanceof ApiError && e.body.code === "stale") return onStale(e.message);
+        throw e;
+      }
       await onSaved();
     });
   return (

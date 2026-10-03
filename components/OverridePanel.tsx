@@ -9,7 +9,7 @@ import { Btn, Spinner } from "./Btn";
 import { useDialog } from "./Dialog";
 import { call, get, post } from "./client/api";
 import { fmtDateTime, fmtRating } from "./client/format";
-import { useAction, usePoll, useServerClock, useStoredChoice } from "./client/hooks";
+import { useAction, useBracketScreen, usePoll, useServerClock, useStoredChoice } from "./client/hooks";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 
 interface ActionRow {
@@ -49,6 +49,7 @@ function positionLabel(e: EntryView, b: BracketPayload): string {
 export function OverridePanel({ initial, initialActions }: { initial: BracketPayload; initialActions: ActionRow[] }) {
   const router = useRouter();
   const { data: b, setData } = usePoll<BracketPayload>("/api/admin/bracket", 5_000, initial, bracketIsStale);
+  useBracketScreen(b, setData);
   const now = useServerClock(b.server_now);
   const [view, setView] = useStoredChoice<BracketViewMode>("override-view", "tree", "tree");
   // The player picked to move (O-17), and the match whose card a tree box opened.

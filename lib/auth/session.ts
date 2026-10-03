@@ -10,6 +10,17 @@ export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 export interface Session {
   name: string;
+  /**
+   * What the requesting screen shows, from its headers (spec 7.8): the device's id and the bracket
+   * version it was looking at. Not part of the cookie; requireAdmin fills it in for the write check.
+   */
+  view?: ScreenView;
+}
+
+export interface ScreenView {
+  client: string | null;
+  /** `x-bracket-version: {competition id}@{version}`, or null when the screen sent none. */
+  saw: { competition: string; version: string } | null;
 }
 
 function signature(name: string, code: string): string {

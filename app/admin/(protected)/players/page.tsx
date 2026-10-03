@@ -10,6 +10,6 @@ export const dynamic = "force-dynamic";
 export default async function PlayersPage() {
   const db = await getDb();
   const session = await currentSession();
-  const players = (await listPlayers(db, true)).map((p) => ({ id: p.id, name: p.name, rating: p.rating, active: p.active, photo: photoUrl(p) }));
+  const players = (await listPlayers(db, true)).map((p) => ({ id: p.id, name: p.name, rating: p.rating, active: p.active, photo: photoUrl(p), updated_at: p.updated_at.toISOString() }));
   return <PlayersAdmin initial={players} signedInAs={session?.name ?? ""} />;
 }

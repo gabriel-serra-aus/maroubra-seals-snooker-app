@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { serverOffsetMs } from "@/lib/timer";
+import { FRESH_BRACKET, showingBracket } from "./api";
+import type { BracketPayload } from "@/lib/bracket/payload";
 
 /**
  * Polls a JSON URL every `intervalMs`, and again whenever the page becomes visible (a locked phone coming
@@ -52,6 +54,21 @@ export function usePoll<T>(url: string, intervalMs: number, initial: T, isStale?
     };
   }, [refresh, intervalMs]);
   return { data, setData, refresh, error };
+}
+
+/**
+ * A screen that shows the night's bracket and writes to it (spec 7.8, O-22): every write carries the
+ * version on screen, and when another device got there first the refusal's fresh bracket replaces it.
+ */
+export function useBracketScreen(b: BracketPayload | null, setData: (b: BracketPayload) => void) {
+  useEffect(() => {
+    if (b) showingBracket(b);
+  }, [b]);
+  useEffect(() => {
+    const onFresh = (e: Event) => setData((e as CustomEvent<BracketPayload>).detail);
+    window.addEventListener(FRESH_BRACKET, onFresh);
+    return () => window.removeEventListener(FRESH_BRACKET, onFresh);
+  }, [setData]);
 }
 
 /** Server-corrected "now", ticking once a second. */
