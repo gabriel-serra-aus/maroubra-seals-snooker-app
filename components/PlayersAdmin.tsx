@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
 import { Btn } from "./Btn";
+import { CameraCapture } from "./CameraCapture";
 import { del, get, patch, post, put } from "./client/api";
 import { fmtDate, fmtRating } from "./client/format";
 import { useAction } from "./client/hooks";
@@ -102,9 +103,10 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
 /**
  * Shrinks a photo on the phone before it is sent (O-18): the centre square, 320 pixels across, as a JPEG.
  * A phone camera's 4 MB becomes about 25 KB, so the upload is quick and the database stays small.
+ * Takes a chosen file or the camera's live picture (CameraCapture).
  */
-async function squarePhoto(file: File): Promise<Blob> {
-  const img = await createImageBitmap(file);
+async function squarePhoto(source: ImageBitmapSource): Promise<Blob> {
+  const img = await createImageBitmap(source);
   const side = Math.min(img.width, img.height);
   const out = 320;
   const canvas = document.createElement("canvas");
@@ -119,10 +121,19 @@ async function squarePhoto(file: File): Promise<Blob> {
   return blob;
 }
 
-/** The player's photo on the edit card: take or choose one, or remove it (spec 3.2, O-18). Saved at once. */
+/**
+ * The player's photo on the edit card: take one with the camera, choose a file, or remove it (spec 3.2,
+ * O-18). Saved at once.
+ */
 function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) => void }) {
   const input = useRef<HTMLInputElement>(null);
+  const [camera, setCamera] = useState(false);
   const { busy, error, run, isPending } = useAction();
+  const send = (photo: Blob) =>
+    run(async () => {
+      const r = await put<{ player: ClubPlayer }>(`/api/admin/players/${p.id}/photo`, photo);
+      onPhoto(r.player);
+    }, "upload");
   const upload = (file: File) =>
     run(async () => {
       const r = await put<{ player: ClubPlayer }>(`/api/admin/players/${p.id}/photo`, await squarePhoto(file));
@@ -149,8 +160,11 @@ function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) =>
             if (file) void upload(file);
           }}
         />
-        <Btn className="sm" disabled={busy} pending={isPending("upload")} onClick={() => input.current?.click()}>
-          {p.photo ? "Change photo" : "Take / choose photo"}
+        <Btn className="sm" disabled={busy} pending={isPending("upload")} onClick={() => setCamera(true)}>
+          Take photo
+        </Btn>
+        <Btn className="sm" disabled={busy} onClick={() => input.current?.click()}>
+          Choose photo
         </Btn>
         {p.photo && (
           <Btn className="sm danger" disabled={busy} pending={isPending("remove")} onClick={remove}>
@@ -159,6 +173,20 @@ function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) =>
         )}
       </div>
       {error && <div className="error">{error}</div>}
+      {camera && (
+        <CameraCapture
+          shrink={squarePhoto}
+          onUse={(photo) => {
+            setCamera(false);
+            void send(photo);
+          }}
+          onChooseFile={() => {
+            setCamera(false);
+            input.current?.click();
+          }}
+          onClose={() => setCamera(false)}
+        />
+      )}
     </div>
   );
 }

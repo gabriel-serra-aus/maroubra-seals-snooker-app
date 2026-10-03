@@ -1025,6 +1025,16 @@ details.round summary {
   background: var(--card);
 }
 
+/* Take photo (components/CameraCapture.tsx): the live picture, square like the stored photo. */
+.camera-view {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #000;
+}
+
 .dialog-body {
   margin: 8px 0;
 }
