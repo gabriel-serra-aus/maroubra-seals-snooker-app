@@ -12,6 +12,9 @@ export interface PlayerRecord {
   deactivated_at: Date | null;
   /** When the photo last changed, or null without one: the version its URL carries (spec 6.6, O-18). */
   photo_at: Date | null;
+  /** Contact details, organiser's screens only (spec 3.2, O-23). */
+  phone: string | null;
+  email: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -52,10 +55,14 @@ export async function insertRatingChange(
 }
 
 /** Adds a player; the first rating is written to the history so its origin is on record (spec 3.2). */
-export async function createPlayer(q: Queryable, name: string, rating: number, changedBy: string): Promise<PlayerRecord> {
+export async function createPlayer(
+  q: Queryable, name: string, rating: number, changedBy: string, contact: { phone?: string | null; email?: string | null } = {},
+): Promise<PlayerRecord> {
   const clash = await q.query("select 1 from players where lower(name) = lower($1)", [name]);
   if (clash.length) throw conflict("A player with that name already exists");
-  const [row] = await q.query<PlayerRecord>("insert into players (name, rating) values ($1, $2) returning *", [name, rating]);
+  const [row] = await q.query<PlayerRecord>("insert into players (name, rating, phone, email) values ($1, $2, $3, $4) returning *",
+    [name, rating, contact.phone ?? null, contact.email ?? null],
+  );
   await insertRatingChange(q, { player_id: row.id, competition_id: null, old_rating: null, new_rating: rating, changed_by: changedBy, reason: "added" });
   return row;
 }
@@ -67,11 +74,14 @@ export interface PlayerPatch {
   rating?: number;
   reason?: string;
   active?: boolean;
+  /** null clears it (spec 3.2, O-23). */
+  phone?: string | null;
+  email?: string | null;
 }
 
 /**
  * Rename, rating override and activate/deactivate (spec 7.3). A rename keeps names unique ignoring case and is
- * logged naming the organiser (O-8). Deactivation is refused while they are in a live night (O-9).
+ * logged naming the organiser (O-8); contact details are just stored (O-23). Deactivation is refused while they are in a live night (O-9).
  */
 export async function updatePlayer(q: Queryable, id: string, patch: PlayerPatch, changedBy: string): Promise<PlayerRecord> {
   const player = await getPlayer(q, id, true);
@@ -91,6 +101,11 @@ export async function updatePlayer(q: Queryable, id: string, patch: PlayerPatch,
       player_id: id, competition_id: null, old_rating: player.rating, new_rating: patch.rating, changed_by: changedBy, reason: patch.reason ?? null,
     });
     await q.query("update players set rating = $2, updated_at = now() where id = $1", [id, patch.rating]);
+  }
+  for (const key of ["phone", "email"] as const) {
+    if (patch[key] !== undefined && patch[key] !== player[key]) {
+      await q.query(`update players set ${key} = $2, updated_at = now() where id = $1`, [id, patch[key]]);
+    }
   }
   if (patch.active !== undefined && patch.active !== player.active) {
     if (!patch.active) {

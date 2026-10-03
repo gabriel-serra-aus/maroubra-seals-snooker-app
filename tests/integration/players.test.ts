@@ -69,3 +69,36 @@ describe("setup defaults (spec 3.3, 7.4)", () => {
     expect((await api.abandon(c.body.competition.id)).status).toBe(200);
   });
 });
+
+describe("contact details (spec 3.2, 7.3, O-23)", () => {
+  it("are optional, tidied, editable and clearable", async () => {
+    const r = await api.createPlayer("Neil Robertson", 5, { phone: "+61 412-345-678", email: " Neil@Example.com " });
+    expect(r.status).toBe(201);
+    const p = r.body.player;
+    expect([p.phone, p.email]).toEqual(["0412 345 678", "neil@example.com"]);
+
+    const landline = (await api.patchPlayer(p.id, { phone: "(02) 9123 4567" })).body.player as { phone?: string; email?: string };
+    expect([landline.phone, landline.email]).toEqual(["02 9123 4567", "neil@example.com"]);
+    const cleared = (await api.patchPlayer(p.id, { phone: "", email: "" })).body.player as { phone?: string | null; email?: string | null };
+    expect([cleared.phone, cleared.email]).toEqual([null, null]);
+
+    const none = (await api.createPlayer("Mark Selby", 5)).body.player as { phone?: string | null; email?: string | null };
+    expect([none.phone, none.email]).toEqual([null, null]);
+  });
+
+  it("refuses a number that isn't Australian, or a bad email", async () => {
+    const id = (await api.createPlayer("Judd Trump", 5)).body.player.id;
+    expect((await api.patchPlayer(id, { phone: "9123 4567" })).status).toBe(400);
+    expect((await api.patchPlayer(id, { phone: "+64 21 123 4567" })).status).toBe(400);
+    expect((await api.patchPlayer(id, { email: "judd@" })).status).toBe(400);
+    expect((await api.createPlayer("Ali Carter", 5, { email: "nope" })).status).toBe(400);
+  });
+
+  it("never leave the server on a public route", async () => {
+    const id = (await api.createPlayer("Kyren Wilson", 5)).body.player.id;
+    expect((await api.patchPlayer(id, { phone: "0499 888 777", email: "kyren@example.com" })).status).toBe(200);
+    const pub = JSON.stringify((await api.publicBracket()).body) + JSON.stringify((await api.publicPlayers()).body);
+    expect(pub).not.toContain("0499");
+    expect(pub).not.toContain("kyren@");
+  });
+});

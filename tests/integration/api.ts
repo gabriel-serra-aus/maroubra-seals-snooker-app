@@ -92,7 +92,8 @@ export const api = {
   publicPlayers: () => call<{ players: Array<{ id: string; name: string; rating: number; photo: string | null }> }>(publicPlayers.GET, "GET", "/api/public/players", { auth: false }),
   players: (includeInactive = false) =>
     call<{ players: Array<{ id: string; name: string; rating: number; active: boolean }> }>(players.GET, "GET", `/api/admin/players${includeInactive ? "?include_inactive=1" : ""}`),
-  createPlayer: (name: string, rating: number) => call<{ player: { id: string; name: string; rating: number } }>(players.POST, "POST", "/api/admin/players", { body: { name, rating } }),
+  createPlayer: (name: string, rating: number, contact: { phone?: string; email?: string } = {}) =>
+    call<{ player: { id: string; name: string; rating: number; phone?: string | null; email?: string | null } }>(players.POST, "POST", "/api/admin/players", { body: { name, rating, ...contact } }),
   patchPlayer: (id: string, body: unknown) => call<{ player: { id: string; rating: number; active: boolean } }>(playerById.PATCH, "PATCH", `/api/admin/players/${id}`, { body, params: { id } }),
   putPhoto: (id: string, bytes: Uint8Array, type: string, auth = true) => sendBytes(playerPhoto.PUT, "PUT", `/api/admin/players/${id}/photo`, { id }, bytes, type, auth),
   deletePhoto: (id: string) => call<{ player: { photo: string | null } }>(playerPhoto.DELETE, "DELETE", `/api/admin/players/${id}/photo`, { params: { id } }),

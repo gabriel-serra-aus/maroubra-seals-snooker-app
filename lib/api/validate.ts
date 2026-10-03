@@ -1,6 +1,7 @@
 // Hand-rolled input checks. Each returns the typed value or throws a 400 naming the field.
 import { badRequest } from "@/lib/logic/errors";
 import { RATING_MAX, RATING_MIN } from "@/lib/logic/ratings";
+import { normaliseEmail, normalisePhone } from "@/lib/contact";
 
 type Body = Record<string, unknown>;
 
@@ -78,3 +79,22 @@ export function optionalUuid(body: Body, key: string): string | undefined {
 export { RATING_MAX, RATING_MIN };
 export const requiredRating = (body: Body, key = "rating") => requiredInt(body, key, RATING_MIN, RATING_MAX);
 export const optionalRating = (body: Body, key = "rating") => optionalInt(body, key, RATING_MIN, RATING_MAX);
+
+/** Contact details (spec 3.2, O-23): absent leaves it alone, blank clears it (null), anything else must be valid. */
+export function optionalPhone(body: Body, key = "phone"): string | null | undefined {
+  const v = optionalString(body, key, 40);
+  if (v === undefined) return undefined;
+  if (v === "") return null;
+  const phone = normalisePhone(v);
+  if (!phone) throw badRequest("Enter an Australian mobile or landline, e.g. 0412 345 678 or 02 9123 4567");
+  return phone;
+}
+
+export function optionalEmail(body: Body, key = "email"): string | null | undefined {
+  const v = optionalString(body, key, 254);
+  if (v === undefined) return undefined;
+  if (v === "") return null;
+  const email = normaliseEmail(v);
+  if (!email) throw badRequest("Enter a valid email address, e.g. name@example.com");
+  return email;
+}

@@ -1,9 +1,9 @@
-// GET /api/admin/players?include_inactive=1 and POST /api/admin/players { name, rating } (spec 7.3).
+// GET /api/admin/players?include_inactive=1 and POST /api/admin/players { name, rating, phone?, email? } (spec 7.3).
 import { getDb } from "@/lib/db/client";
 import { createPlayer, listPlayers } from "@/lib/db/players";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
-import { requiredRating, requiredString } from "@/lib/api/validate";
+import { optionalEmail, optionalPhone, requiredRating, requiredString } from "@/lib/api/validate";
 import { photoUrl } from "@/lib/bracket/payload";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +20,8 @@ export const POST = handle(async (request) => {
   const body = await readJson(request);
   const name = requiredString(body, "name", 60);
   const rating = requiredRating(body);
+  const contact = { phone: optionalPhone(body), email: optionalEmail(body) };
   const db = await getDb();
-  const player = await db.transaction((tx) => createPlayer(tx, name, rating, session.name));
+  const player = await db.transaction((tx) => createPlayer(tx, name, rating, session.name, contact));
   return json({ player: { ...player, photo: null } }, { status: 201 });
 });

@@ -727,6 +727,8 @@ label.field span {
 input[type="text"],
 input[type="password"],
 input[type="number"],
+input[type="tel"],
+input[type="email"],
 input[type="search"],
 select {
   font: inherit;

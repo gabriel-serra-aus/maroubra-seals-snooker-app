@@ -151,12 +151,14 @@ Shows every active player's name and rating, inactive players behind a toggle, a
 
 | Action | What happens |
 | --- | --- |
-| Add player | Name and starting rating. The first rating is recorded as a rating change so its origin is in the history. |
-| Edit → Save | Renames the player and/or overrides the rating. A new name must still be unique, ignoring case; a rename keeps every result and the rating history, and writes an `admin_actions` row naming the organiser (O-8). A rating change writes a history row recording old value, new value, the signed-in organiser and the time (O-8). **Changing a rating never changes the start of a match already created tonight** (5.6). |
+| Add player | Name and starting rating, and optionally a mobile number and email address (O-23). The first rating is recorded as a rating change so its origin is in the history. |
+| Edit → Save | Renames the player, overrides the rating and/or changes the contact details. A new name must still be unique, ignoring case; a rename keeps every result and the rating history, and writes an `admin_actions` row naming the organiser (O-8). A rating change writes a history row recording old value, new value, the signed-in organiser and the time (O-8). **Changing a rating never changes the start of a match already created tonight** (5.6). |
 | Active / Inactive | Deactivating hides the player from the entry list and the public list, and blocks them from being entered. Neither direction touches their history. A player in tonight's competition cannot be deactivated until the night is complete or abandoned. |
 | Photo (O-18) | On the edit sheet: **Take photo** opens the app's own camera card — a live picture from the phone's back camera or a computer's webcam, **Switch camera** for the other one, **Snap**, then **Use photo** or **Retake**; without a camera, or with permission refused, the card says so and offers the file picker. **Choose photo** picks a file or the phone's gallery. Either way the browser crops the centre square, shrinks it to 320 pixels and uploads it at once (no Save needed); a new one replaces the old, and **Remove photo** takes it away. Every list on the organiser's screens shows the photo small beside the name, or the player's initials on a colour of their own when there is none. The public site never shows photos (O-21). |
 
 There is no delete (O-9). If a player was added by mistake, deactivate them.
+
+**Contact details (O-23).** Both optional, on the Add and edit sheets. The phone is an Australian mobile (04…) or landline (02, 03, 07, 08), typed any common way — `+61`, spaces, dashes, brackets — and stored tidied as `0412 345 678` or `02 9123 4567`; anything else is refused with an example. The email is trimmed, lower-cased and checked for a plausible shape only. Blanking a field clears it. Changes are not logged. They appear on the organiser's screens only — never on a public route.
 
 **Public names (O-21).** The public site shows each player as first name and surname initial ("Gabriel S."); a bracketed nickname stands in for the first name ("Leonard Thomlinson (Lenny)" → "Lenny T."). When two active players would read the same, both get more surname letters, up to three ("Chris Han." / "Chris Hal."). If they still read the same, this screen shows a warning naming them, and the organiser edits one of the names — a nickname in brackets is the easy fix.
 
@@ -769,6 +771,8 @@ create type match_origin as enum ('draw', 'placement', 'force_pair', 'close', 'a
 | rating | integer | not null, `check (rating between -100 and 200)` — lower is better and **negative is allowed** (5.6) |
 | active | boolean | not null, default `true` (O-9) |
 | deactivated_at | timestamptz | nullable; `check ((deactivated_at is null) = active)` |
+| phone | text | nullable, 1–20 chars; an Australian number stored as `0412 345 678` / `02 9123 4567` (O-23) |
+| email | text | nullable, 3–254 chars, lower-cased (O-23) |
 | created_at / updated_at | timestamptz | not null, default now() |
 
 There is no delete route and no `on delete cascade` pointing at this table: history and past entries always resolve to a real player.
@@ -894,7 +898,7 @@ Only `matches.started_at` and `matches.time_limit_minutes` (falling back to `com
 
 ### 6.5 Access
 
-Row Level Security is enabled on every table with **no policies**, so the anon key can read nothing. All reads and writes go through Next.js route handlers on the server. One credential, one place it lives, and the Supabase dashboard stays available for on-the-night manual fixes — though the master override (3.9) should be the first thing reached for, because it keeps the audit trail.
+Row Level Security is enabled on every table with **no policies** — `schema_migrations` too, which the migrate script creates outside the migrations (0008), and a test fails if any table lacks it — so the anon key can read nothing. All reads and writes go through Next.js route handlers on the server. One credential, one place it lives, and the Supabase dashboard stays available for on-the-night manual fixes — though the master override (3.9) should be the first thing reached for, because it keeps the audit trail.
 
 ### 6.6 Player photos (O-18)
 
@@ -942,8 +946,8 @@ The `s-maxage=5` cache is a **cost control**, not a nicety — see CLAUDE.md. Th
 | Method + route | Input | Validation |
 | --- | --- | --- |
 | `GET /api/admin/players` | `?include_inactive=1` | — |
-| `POST /api/admin/players` | `{ name, rating }` | Name 1–60 chars, unique; rating integer −100–200 (negatives allowed). Writes the player and an initial rating change attributed to the session (O-8). |
-| `PATCH /api/admin/players/{id}` | any of `{ expected_updated_at, name, rating, reason, active }` | Name 1–60 chars, unique ignoring case (`409` naming the clash); a rename writes an `admin_actions` row (action `rename_player`, no competition). `expected_updated_at` (the edit sheet sends the player's `updated_at` from when it opened) that no longer matches is refused with `409` `{ code: "stale" }` (7.8). Rating integer −100–200; a change writes a `rating_changes` row. `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
+| `POST /api/admin/players` | `{ name, rating, phone?, email? }` | Name 1–60 chars, unique; rating integer −100–200 (negatives allowed); phone and email as 3.2 (`400` otherwise). Writes the player and an initial rating change attributed to the session (O-8). |
+| `PATCH /api/admin/players/{id}` | any of `{ expected_updated_at, name, rating, reason, active, phone, email }` | Phone and email as 3.2; `""` clears one. Name 1–60 chars, unique ignoring case (`409` naming the clash); a rename writes an `admin_actions` row (action `rename_player`, no competition). `expected_updated_at` (the edit sheet sends the player's `updated_at` from when it opened) that no longer matches is refused with `409` `{ code: "stale" }` (7.8). Rating integer −100–200; a change writes a `rating_changes` row. `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
 | `GET /api/admin/players/{id}/rating-history` | — | — |
 | `GET /api/admin/players/{id}/photo?v=…` | — | The photo bytes with their type; `404` without one. `Cache-Control: private, max-age=31536000, immutable` (6.6). |
 | `PUT /api/admin/players/{id}/photo` | The image bytes; `Content-Type` `image/jpeg`, `image/png` or `image/webp` | At most 300 KB, and the bytes must carry that type's signature (`400` otherwise). Replaces any photo and sets `photo_at` (6.6, O-18). Returns the player with `photo`. |
@@ -1054,6 +1058,7 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 | O-20 | A buy-back meeting the same opponent again | **Not in round two, unless the organiser allows it.** A buy-back is placed away from the half of the bracket where they would meet the player who beat them again in round two — that beats O-13's "empty match first". If every open seat is there, the app asks: allow it, or the player doesn't buy back. Free passes count (a pass into that player is the same rematch); round three onwards is fair; late arrivals, Force Pair and the override are not checked. | 3.5, 5.2, 5.13, 7.5 |
 | O-21 | Privacy on the public site | **First name and surname initial, no photos.** The public page shows "Gabriel S.", a bracketed nickname standing in for the first name; names that would read the same grow to three surname letters, and a clash left after that is the organiser's to fix by editing a name (a warning on 3.2 names them). Photos stay on the organiser's screens; the public site shows initials on the player's colour. Built on the server, so nothing private leaves on a public route. | 2, 3.2, 3.8, 6.6, 7.2 |
 | O-22 | Two organisers on different phones or tabs | **Refuse the write that would overwrite an unseen change** (option B, a version check). Simple, and conflicts are rare: the admin bracket refreshes every 5 seconds. The refused screen shows the latest bracket and who changed it; the organiser taps again. A device's own quick taps are never refused. Player edits are checked the same way. | 2, 6.3, 7.3, 7.8 |
+| O-23 | A player's contact details | **Mobile number and email address, both optional.** The number may be an Australian mobile or landline; the email is checked for shape only. Organiser's screens only, like photos (O-21). | 3.2, 6.3, 7.3 |
 
 ### 10.1 Still worth a word from the organiser
 

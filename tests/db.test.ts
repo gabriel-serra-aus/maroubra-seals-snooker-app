@@ -12,7 +12,7 @@ afterAll(() => resetDbForTests());
 describe("schema (spec 6)", () => {
   it("applies the migration on an in-memory PGlite database", async () => {
     const rows = await db.query<{ name: string }>("select name from schema_migrations order by name");
-    expect(rows.map((r) => r.name)).toEqual(["0001_init.sql", "0002_fixed_bracket.sql", "0003_late_arrivals.sql", "0004_competition_version.sql", "0005_tables.sql", "0006_player_photos.sql", "0007_competition_updated_by.sql"]);
+    expect(rows.map((r) => r.name)).toEqual(["0001_init.sql", "0002_fixed_bracket.sql", "0003_late_arrivals.sql", "0004_competition_version.sql", "0005_tables.sql", "0006_player_photos.sql", "0007_competition_updated_by.sql", "0008_schema_migrations_rls.sql", "0009_player_contact.sql"]);
     const tables = await db.query<{ table_name: string }>(
       "select table_name from information_schema.tables where table_schema = 'public' order by table_name",
     );
@@ -27,6 +27,13 @@ describe("schema (spec 6)", () => {
       "rating_changes",
       "schema_migrations",
     ]);
+  });
+
+  it("enables RLS on every public table (6.5)", async () => {
+    const open = await db.query<{ relname: string }>(
+      "select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity",
+    );
+    expect(open).toEqual([]);
   });
 
   it("allows negative ratings and rejects out-of-range ones (5.6)", async () => {

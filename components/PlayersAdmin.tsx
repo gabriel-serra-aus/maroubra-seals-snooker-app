@@ -15,6 +15,9 @@ export interface ClubPlayer {
   rating: number;
   active: boolean;
   photo: string | null;
+  /** Contact details, organiser's screens only (O-23). */
+  phone?: string | null;
+  email?: string | null;
   /** When the player last changed: an edit made from an older copy is refused (spec 7.8, O-22). */
   updated_at?: string;
 }
@@ -201,6 +204,8 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onStale, onPhoto }: { p: C
   const [rating, setRating] = useState(String(p.rating));
   const [reason, setReason] = useState("");
   const [active, setActive] = useState(p.active);
+  const [phone, setPhone] = useState(p.phone ?? "");
+  const [email, setEmail] = useState(p.email ?? "");
   const [history, setHistory] = useState<HistoryRow[] | null>(null);
   const { busy, error, run } = useAction();
   useEffect(() => {
@@ -212,7 +217,7 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onStale, onPhoto }: { p: C
       if (!Number.isInteger(r)) throw new Error("Rating must be a whole number");
       if (!name.trim()) throw new Error("Enter a name");
       try {
-        await patch(`/api/admin/players/${p.id}`, { expected_updated_at: p.updated_at, name: name.trim(), rating: r, reason: reason.trim() || undefined, active });
+        await patch(`/api/admin/players/${p.id}`, { expected_updated_at: p.updated_at, name: name.trim(), rating: r, reason: reason.trim() || undefined, active, phone, email });
       } catch (e) {
         // Changed on another screen since this sheet opened (spec 7.8): show the latest instead of overwriting it.
         if (e instanceof ApiError && e.body.code === "stale") return onStale(e.message);
@@ -237,6 +242,7 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onStale, onPhoto }: { p: C
           <span>Reason</span>
           <input type="text" placeholder="weekly review" value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
+        <ContactFields phone={phone} email={email} setPhone={setPhone} setEmail={setEmail} />
         <div className="field">
           <span className="muted small">Status</span>
           <label className="radio"><input type="radio" checked={active} onChange={() => setActive(true)} /> Active</label>
@@ -272,15 +278,33 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onStale, onPhoto }: { p: C
   );
 }
 
+/** Mobile number and email, both optional (spec 3.2, O-23); the server checks and tidies them. */
+function ContactFields({ phone, email, setPhone, setEmail }: { phone: string; email: string; setPhone: (v: string) => void; setEmail: (v: string) => void }) {
+  return (
+    <>
+      <label className="field">
+        <span>Mobile number (or landline, optional)</span>
+        <input type="tel" inputMode="tel" autoComplete="off" placeholder="0412 345 678" maxLength={40} value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </label>
+      <label className="field">
+        <span>Email address (optional)</span>
+        <input type="email" inputMode="email" autoComplete="off" placeholder="name@example.com" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} />
+      </label>
+    </>
+  );
+}
+
 export function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: (player: ClubPlayer) => Promise<void> }) {
   const [name, setName] = useState("");
   const [rating, setRating] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const { busy, error, run } = useAction();
   const save = () =>
     run(async () => {
       if (!name.trim()) throw new Error("Enter a name");
       if (!Number.isInteger(Number(rating)) || rating.trim() === "") throw new Error("Rating must be a whole number");
-      const r = await post<{ player: ClubPlayer }>("/api/admin/players", { name: name.trim(), rating: Number(rating) });
+      const r = await post<{ player: ClubPlayer }>("/api/admin/players", { name: name.trim(), rating: Number(rating), phone, email });
       await onSaved(r.player);
     });
   return (
@@ -295,6 +319,7 @@ export function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: (
           <span>Starting rating (lower is better; negatives allowed)</span>
           <input type="number" value={rating} onChange={(e) => setRating(e.target.value)} />
         </label>
+        <ContactFields phone={phone} email={email} setPhone={setPhone} setEmail={setEmail} />
         {error && <div className="error">{error}</div>}
         <div className="row">
           <Btn className="primary" disabled={busy} pending={busy} onClick={save}>Add</Btn>
