@@ -136,6 +136,17 @@ export function lastRound(s: Snapshot): number {
   return Math.min(r, R);
 }
 
+/**
+ * The two finalists of a night closed before its final was played (O-29): both semi-finals decided, so the
+ * final match exists, and nobody won it. Such a night is finished, not "unfinished". Null otherwise.
+ */
+export function unplayedFinal(s: Snapshot): [string, string] | null {
+  const c = s.competition;
+  if (c.status !== "complete" || c.winner_entry_id !== null) return null;
+  const f = s.matches.find((m) => m.round === roundsFor(c.bracket_size));
+  return f && f.state !== "finished" ? [f.player_a_id, f.player_b_id] : null;
+}
+
 /** bracket_size - entries: the whole of the O-3 cap. */
 export function openSlots(s: Snapshot): number {
   return s.competition.bracket_size - s.entries.length;

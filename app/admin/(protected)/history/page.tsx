@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BracketTree } from "@/components/BracketTree";
+import { TreeViews } from "@/components/ViewToggle";
 import { fmtDate, fmtDateShort, fmtDelta, fmtRating } from "@/components/client/format";
 import { buildBracketPayload } from "@/lib/bracket/payload";
 import { getDb } from "@/lib/db/client";
@@ -70,7 +70,7 @@ async function CompHistory({ history, nightId }: { history: CompetitionHistory; 
             <Link key={n.id} href={`/admin/history?night=${n.id}`} className={`btn sm ${n.id === night.id ? "primary" : ""}`} aria-current={n.id === night.id ? "page" : undefined}>
               {fmtDateShort(dateOf(n).toISOString())}
               {n.status === "abandoned" && " (abandoned)"}
-              {n.status === "complete" && !n.winner_name && " (unfinished)"}
+              {n.status === "complete" && !n.winner_name && !n.finalist_names && " (unfinished)"}
             </Link>
           ))}
         </nav>
@@ -89,6 +89,11 @@ async function CompHistory({ history, nightId }: { history: CompetitionHistory; 
                   · winner <strong>{night.winner_name}</strong>
                   {night.runner_up_name && <> · runner-up {night.runner_up_name}</>}
                 </>
+              ) : night.finalist_names ? (
+                // The final was set but not played: a finished night with no winner (O-29).
+                <>
+                  · finalists <strong>{night.finalist_names[0]}</strong> and <strong>{night.finalist_names[1]}</strong>, final not played
+                </>
               ) : (
                 // Ended early on time (spec 5.11): played and counted, but no final and no champion.
                 <>· <strong>ended early</strong>, no winner</>
@@ -99,7 +104,7 @@ async function CompHistory({ history, nightId }: { history: CompetitionHistory; 
           )}
         </div>
         {payload?.competition ? (
-          <BracketTree b={payload} now={Date.parse(payload.server_now)} />
+          <TreeViews b={payload} now={Date.parse(payload.server_now)} />
         ) : (
           <p className="muted small">This night was abandoned before it finished, so there is no bracket to show.</p>
         )}

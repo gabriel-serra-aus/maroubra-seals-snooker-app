@@ -31,22 +31,24 @@
   box-sizing: border-box;
 }
 
+/* Accessibility (O-28): every size in rem grows with this, 30% above the browser's own. */
 html {
   -webkit-text-size-adjust: 100%;
+  font-size: 130%;
 }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 1rem/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 /* A phone is read at arm's length in a bar: bigger type, and room under the last card for the floating
    "Powered by Netlify" badge the host injects. */
 @media (max-width: 640px) {
   body {
-    font-size: 17px;
+    font-size: 1.0625rem;
   }
   :root {
     --bottom-tabs: 64px;
@@ -59,7 +61,6 @@ a {
 
 main {
   width: 100%;
-  max-width: 1800px;
   margin: 0 auto;
   padding: 12px clamp(12px, 2vw, 32px) calc(96px + var(--bottom-tabs));
 }
@@ -147,7 +148,6 @@ p {
 }
 
 .topbar .inner {
-  max-width: 1800px;
   margin: 0 auto;
   padding: 0 clamp(0px, 1vw, 20px);
   display: flex;
@@ -194,6 +194,12 @@ p {
   }
   .topbar nav .nav-links a {
     white-space: nowrap;
+  }
+  /* Tighter on a phone so Tonight, Players and More fit beside the initial at the larger type (O-28). */
+  .topbar:not(.public) nav .nav-links > a,
+  .topbar:not(.public) nav .menu-trigger {
+    padding: 8px 6px;
+    font-size: 0.85rem;
   }
   /* The admin bar hides the club name to make room for the pages; the public bar has no pages, so it keeps it. */
   .topbar:not(.public) .brand-name {
@@ -257,7 +263,7 @@ p {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  min-width: 160px;
+  min-width: 10rem;
   display: flex;
   flex-direction: column;
   background: var(--card);
@@ -417,7 +423,7 @@ p {
 
 .actionbar-right .finder {
   flex: 1 1 200px;
-  max-width: 460px;
+  max-width: 28.75rem;
   margin: 0;
   position: relative;
 }
@@ -427,6 +433,17 @@ p {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%231f3a5f' stroke-width='2.2' stroke-linecap='round'><circle cx='11' cy='11' r='7'/><path d='m20 20-3.5-3.5'/></svg>");
   background-repeat: no-repeat;
   background-position: 12px center;
+}
+
+/* Three views and a name box do not fit one phone row (O-28): the switch drops underneath. */
+@media (max-width: 640px) {
+  .actionbar-right {
+    flex-wrap: wrap;
+  }
+  .actionbar-right .finder {
+    flex-basis: 100%;
+    max-width: none;
+  }
 }
 
 .actionbar-right .finder-hits {
@@ -999,7 +1016,7 @@ details.round summary {
 .sheet {
   background: var(--bg);
   width: 100%;
-  max-width: 520px;
+  max-width: 32.5rem;
   max-height: 90vh;
   overflow: auto;
   border-radius: 16px;
@@ -1023,7 +1040,7 @@ details.round summary {
 
 /* Confirm / prompt (components/Dialog.tsx): the app's own, never the browser's. */
 .sheet.dialog {
-  max-width: 460px;
+  max-width: 28.75rem;
   background: var(--card);
 }
 
@@ -1061,7 +1078,7 @@ details.round summary {
 
 .dialog-actions .btn {
   flex: 1 1 0;
-  min-width: 120px;
+  min-width: 7.5rem;
   text-align: center;
   padding: 12px;
   min-height: 48px;
@@ -1206,7 +1223,7 @@ ul.rows li {
 
 .toolbar .finder {
   flex: 1 1 220px;
-  max-width: 420px;
+  max-width: 26.25rem;
 }
 
 .toggle {
@@ -1452,7 +1469,13 @@ svg.tree {
   display: block;
   width: 100%;
   height: auto;
-  font: 12px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  margin: 0 auto;
+  font: 15.5px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Rounds 1–3 | Round 2 – Final above the tree (O-28): switched on the phone, no fetch. */
+.tree-pages {
+  margin: 8px 0 0;
 }
 
 .tree-box.clickable {
@@ -1479,17 +1502,28 @@ svg.tree {
 }
 
 .tree-head {
-  font-size: 11px;
-  font-weight: 700;
-  fill: var(--muted);
+  font-size: 16px;
+  font-weight: 800;
+  fill: var(--navy);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
+/* The rule under each round's heading, across all its columns (round one has two). */
+.tree-head-rule {
+  stroke: var(--navy);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
 .tree-lines {
   fill: none;
-  stroke: var(--line);
+  stroke: var(--muted);
   stroke-width: 1.5;
+}
+
+.tree-arrow {
+  fill: var(--muted);
 }
 
 .tree-box rect {
@@ -1538,7 +1572,7 @@ svg.tree {
 
 .tree-name {
   fill: var(--fg);
-  font-size: 12.5px;
+  font-size: 16px;
 }
 
 .tree-name.winner {
@@ -1553,13 +1587,13 @@ svg.tree {
 .tree-sub,
 .tree-label {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 14.5px;
 }
 
 .tree-label {
-  text-anchor: end;
-  font-size: 10px;
-  font-weight: 600;
+  text-anchor: middle;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .tree-tag.late {
@@ -1568,37 +1602,51 @@ svg.tree {
 
 .tree-tag {
   fill: var(--amber);
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 700;
 }
 
 /* The handicap start beside the weaker player in a tree box (rules 6). */
 .tree-start {
   fill: var(--green);
-  font-size: 11px;
+  font-size: 14.5px;
   font-weight: 700;
 }
 
-/* Start / Record result inside a box of the admin tree (spec 3.4). The fill is scoped under .tree-box so
-   it outranks the box's own state colour (.tree-box.in_play rect). */
+/* The block down the right of every box (O-28): the label, the table and clock. Pale, except on the admin
+   tree where it is the Start / Record result tap (spec 3.4), navy with white text. */
+.tree-side path {
+  fill: var(--done-bg);
+  stroke: var(--line);
+}
+
+.tree-box.in_play .tree-side path {
+  fill: var(--green-bg);
+  stroke: var(--green);
+}
+
 .tree-btn {
   cursor: pointer;
 }
 
-.tree-box .tree-btn rect {
+.tree-box .tree-btn path {
   fill: var(--accent);
   stroke: none;
 }
 
-.tree-btn text {
+.tree-btn text,
+.tree-btn .tree-table,
+.tree-btn .tree-clock {
   fill: #fff;
-  font-size: 11.5px;
-  font-weight: 700;
+}
+
+.tree-btn-icon {
+  font-size: 19px;
   text-anchor: middle;
 }
 
-.tree-btn:hover rect,
-.tree-btn:focus-visible rect {
+.tree-btn:hover path,
+.tree-btn:focus-visible path {
   filter: brightness(1.15);
 }
 
@@ -1668,7 +1716,7 @@ svg.tree.dragging * {
   border-radius: 6px;
   background: var(--accent);
   color: #fff;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
   box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
 }

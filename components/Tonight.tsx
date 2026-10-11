@@ -161,7 +161,7 @@ export function TonightView({ b, now, query }: { b: BracketPayload; now: number;
     <div className="tonight">
       {c.status === "complete" && (
         <div className="info">
-          {c.winner ? <strong>Winner: {c.winner.name}</strong> : <strong>Night ended early — no winner this week.</strong>}
+          {c.winner ? <strong>Winner: {c.winner.name}</strong> : c.finalists ? <strong>Finalists: {c.finalists[0].name} and {c.finalists[1].name}</strong> : <strong>Night ended early — no winner this week.</strong>}
         </div>
       )}
       {nothing && <p className="muted">{q === "" ? "No matches yet — the draw is being made." : `Nothing tonight for “${query}”.`}</p>}

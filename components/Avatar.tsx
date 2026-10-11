@@ -21,9 +21,10 @@ function hue(id: string): number {
   return h;
 }
 
-/** A round photo or initials, `size` pixels across, for HTML. */
+/** A round photo or initials, `size` CSS pixels across at the browser's base type size, for HTML. */
 export function Avatar({ id, name, photo, size = 26, className }: { id: string; name: string; photo: string | null; size?: number; className?: string }) {
-  const style = { width: size, height: size, fontSize: Math.round(size * 0.42) };
+  // In rem, so a face grows with the type (O-28).
+  const style = { width: `${size / 16}rem`, height: `${size / 16}rem`, fontSize: `${(size * 0.42) / 16}rem` };
   if (photo) {
     // Served by our own route with a year-long cache (spec 7.2): no image service, which would cost a
     // function call per size per viewer on Netlify's free tier.

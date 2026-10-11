@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { resetDbForTests } from "@/lib/db/client";
+import { getDb, resetDbForTests } from "@/lib/db/client";
+import { competitionHistory } from "@/lib/db/history";
 import { api, find, loginAs, playCurrentRound, playMatch, freeTable } from "./api";
 
 beforeAll(async () => {
@@ -200,6 +201,27 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     expect(b.competition?.status).toBe("complete");
   });
 
+  it("End night here with the final set but not played is a finished night, not an unfinished one (O-29)", async () => {
+    const players = await club(16, "Finals");
+    const { id } = await night(players);
+    let b = (await api.bracket(id)).body;
+    let guard = 0;
+    while (!find.matchesInRound(b, 4).length && guard++ < 10) b = await playCurrentRound(id);
+    const final = find.matchesInRound(b, 4)[0];
+    expect(final.state).toBe("not_started");
+    const r = await api.endNight(id);
+    expect(r.status).toBe(200);
+    b = r.body.bracket!;
+    expect(b.competition?.winner).toBeNull();
+    expect(b.competition?.ended_early).toBe(false);
+    expect(b.competition?.finalists?.map((e) => e.entry_id)).toEqual([final.a.entry_id, final.b.entry_id]);
+    // Both finalists read "final" in the review, not the round reached (O-24, O-29).
+    const review = await api.ratingReview(id);
+    expect(review.body.rows.filter((x) => x.finish === "final")).toHaveLength(2);
+    const h = await competitionHistory(await getDb());
+    expect(h.nights.find((n) => n.id === id)?.finalist_names?.slice().sort()).toEqual([final.a.name, final.b.name].sort());
+  });
+
   it("End night here closes an unfinished night as complete with no winner (spec 5.11)", async () => {
     const players = await club(8, "Early");
     const { id } = await night(players);
@@ -222,6 +244,7 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     expect(b.competition?.status).toBe("complete");
     expect(b.competition?.winner).toBeNull();
     expect(b.competition?.ended_early).toBe(true);
+    expect(b.competition?.finalists).toBeNull();
     // Every result is kept, and the clock that was running is thrown away (O-5).
     expect(find.matchesInRound(b, 1).every((m) => m.state === "finished")).toBe(true);
     expect(find.match(b, 9).state).toBe("not_started");

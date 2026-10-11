@@ -38,7 +38,7 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
   const { data: b } = usePoll<BracketPayload>("/api/public/bracket", 10_000, initial, bracketIsStale);
   const { data: players } = usePoll<PlayerList>("/api/public/players", 60_000, initialPlayers);
   const now = useServerClock(b.server_now);
-  // Tree by default on a desktop, list on a phone (spec 3.4, 3.8); a tap on the switch is remembered.
+  // Tree by default on a desktop, list on a phone (spec 3.8, O-28); a tap on the switch is remembered.
   const wide = useWideScreen();
   const [view, setView] = useStoredChoice<BracketViewMode>("bracket-view", wide ? "tree" : "list", "list");
   const [tab, setTab] = useState<Tab>("tonight");
@@ -104,20 +104,20 @@ export function PublicBracket({ initial, initialPlayers }: { initial: BracketPay
             </div>
             {c ? (
               <>
-                {/* Find my match with the List | Tree switch beside it, as on 3.4 (spec 3.8). */}
+                {/* Find my match with the Tree | Full tree | List switch beside it, as on 3.4 (spec 3.8, O-28). */}
                 <div className="row actionbar-right" style={{ margin: "8px 0" }}>
                   <PlayerFinder b={b} now={now} query={query} setQuery={setQuery} />
                   <ViewToggle value={view} onChange={setView} />
                 </div>
                 {c.status === "in_progress" && <TableStrip b={b} now={now} />}
-                {view === "tree" ? (
+                {view !== "list" ? (
                   <>
                     {c.status === "complete" && (
                       <div className="info">
-                        {c.winner ? <strong>Winner: {c.winner.name}</strong> : <strong>Night ended early — no winner this week.</strong>}
+                        {c.winner ? <strong>Winner: {c.winner.name}</strong> : c.finalists ? <strong>Finalists: {c.finalists[0].name} and {c.finalists[1].name}</strong> : <strong>Night ended early — no winner this week.</strong>}
                       </div>
                     )}
-                    <BracketTree b={b} now={now} onSelect={(m) => setOpenMatch(m.id)} />
+                    <BracketTree b={b} now={now} onSelect={(m) => setOpenMatch(m.id)} layout={view === "full" ? "full" : "paged"} />
                   </>
                 ) : (
                   <TonightView b={b} now={now} query={query} />

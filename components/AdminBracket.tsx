@@ -17,7 +17,7 @@ import { PlayerFinder } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 import { ApiError, get, patch, post } from "./client/api";
 import { roundName } from "./client/format";
-import { useAction, useBracketScreen, usePoll, useServerClock, useStoredChoice, useWideScreen } from "./client/hooks";
+import { useAction, useBracketScreen, usePoll, useServerClock, useStoredChoice } from "./client/hooks";
 import { playAlarm, unlockSound, useSound, useTimeoutAlert } from "./client/sound";
 
 type Dialog = { kind: "complete" | "correct"; m: MatchView } | { kind: "match" | "table" | "move"; id: string } | { kind: "add" } | null;
@@ -39,9 +39,8 @@ export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload;
   // The player whose edit card is open, opened from a match card (O-26).
   const [editing, setEditing] = useState<FullPlayer | null>(null);
   const [query, setQuery] = useState("");
-  // Tree by default on a desktop, list on a phone (spec 3.4, 3.8); a tap on the switch is remembered.
-  const wide = useWideScreen();
-  const [view, setView] = useStoredChoice<BracketViewMode>("bracket-view", wide ? "tree" : "list", "list");
+  // Tree by default, on a phone too (O-28); a tap on the switch is remembered on the device.
+  const [view, setView] = useStoredChoice<BracketViewMode>("admin-bracket-view", "tree");
   const { busy, pending, isPending, error, run, setError } = useAction();
   // A night-wide action (close, force pair, end, abandon) locks every card; a match action locks only
   // its own match, so the next table can be served while this one saves (spec 3.4).
@@ -239,9 +238,13 @@ export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload;
       const points = [dry.unplayed === 0 ? "Every match has been played." : `${dry.unplayed} match${dry.unplayed === 1 ? " is" : "es are"} left unplayed.`];
       if (dry.clocks_cancelled > 0) points.push(`${dry.clocks_cancelled} running clock${dry.clocks_cancelled === 1 ? " is" : "s are"} discarded.`);
       if (dry.still_in.length > 0) points.push(`Still in: ${dry.still_in.join(", ")}.`);
+      // Both semi-finals decided: the final is set, so ending here is a finished night, not an unfinished one (O-29).
+      const finalSet = b.rounds.some((r) => r.round === c.rounds_total && r.matches.length > 0);
       const ok = await ask({
         title: `End ${c.name} here?`,
-        body: "The night is kept and counts, but no winner is recorded and the rating review opens (O-16).",
+        body: finalSet
+          ? "Both finalists are set: this counts as a finished night. No winner is recorded and the rating review opens (O-29)."
+          : "The night is kept and counts, but no winner is recorded and the rating review opens (O-16).",
         points,
         note: "This cannot be undone.",
         confirm: "End the night",
@@ -250,7 +253,11 @@ export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload;
       });
       if (!ok) return;
       const r = await post<{ unplayed: number } & WithBracket>(`/api/admin/competitions/${compId}/end`);
-      setNotice(`${c.name} ended with ${r.unplayed} match${r.unplayed === 1 ? "" : "es"} unplayed. No winner recorded — the rating review is open.`);
+      setNotice(
+        r.bracket.competition?.finalists
+          ? `${c.name} finished at the final. No winner recorded — the rating review is open.`
+          : `${c.name} ended with ${r.unplayed} match${r.unplayed === 1 ? "" : "es"} unplayed. No winner recorded — the rating review is open.`,
+      );
       setData(r.bracket);
     }, "end");
 
@@ -330,6 +337,9 @@ export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload;
         <div className="info">
           {c.winner ? (
             <strong>Winner: {c.winner.name}</strong>
+          ) : c.finalists ? (
+            // Both semi-finals decided, the final not played: a finished night (O-29).
+            <strong>Finalists: {c.finalists[0].name} and {c.finalists[1].name}. The final was not played.</strong>
           ) : (
             // Ended early on time (spec 5.11): the night counts and reaches the rating review, but the
             // final was never played, so there is no champion.
@@ -406,10 +416,10 @@ export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload;
           {error}
         </div>
       )}
-      {view === "tree" ? (
+      {view !== "list" ? (
         <>
-          {c.status === "in_progress" && <p className="muted small">Start and Record result are on each box. Tap a box for the time limit, cancel start or to review a result.</p>}
-          <BracketTree b={b} now={now} onSelect={c.status === "in_progress" ? (m) => setDialog({ kind: "match", id: m.id }) : undefined} actions={c.status === "in_progress" ? actions : undefined} />
+          {c.status === "in_progress" && <p className="muted small">Start and Record result are the navy block on each box. Tap a box for the time limit, cancel start or to review a result.</p>}
+          <BracketTree b={b} now={now} onSelect={c.status === "in_progress" ? (m) => setDialog({ kind: "match", id: m.id }) : undefined} actions={c.status === "in_progress" ? actions : undefined} layout={view === "full" ? "full" : "paged"} />
         </>
       ) : (
         <BracketView b={b} now={now} actions={c.status === "in_progress" ? actions : undefined} query={query} />

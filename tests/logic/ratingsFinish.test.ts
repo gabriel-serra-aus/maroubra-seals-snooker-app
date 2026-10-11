@@ -3,6 +3,7 @@ import { closeBuybacks } from "@/lib/logic/buybacks";
 import { endCompetitionEarly } from "@/lib/logic/competition";
 import { refreshPlayerStarts } from "@/lib/logic/matches";
 import { ratingReview } from "@/lib/logic/ratings";
+import { unplayedFinal } from "@/lib/logic/derive";
 import { cancelStart } from "@/lib/logic/matchControl";
 import { makeCtx, match, play, playRound, startNight, startOn } from "./helpers";
 
@@ -88,6 +89,7 @@ describe("rating change by finishing position (O-24, spec 5.9)", () => {
     expect(semi.map((r) => r.player_id).sort()).toEqual([9, 10, 11].map((n) => playerOf(s, match(s, n).winner_id!)).sort());
     expect(semi.every((r) => r.delta === -2)).toBe(true);
     expect(review.some((r) => r.group === "final")).toBe(false);
+    expect(unplayedFinal(s)).toBeNull();
     const r3m1 = match(s, 13);
     expect(review.find((r) => r.player_id === playerOf(s, r3m1.player_a_id))!.story).toMatch(/^In R3M1 v .+ when the night ended$/);
     expect(review.find((r) => r.player_id === playerOf(s, match(s, 11).winner_id!))!.story).toBe("Through to R3 when the night ended");
@@ -103,6 +105,9 @@ describe("rating change by finishing position (O-24, spec 5.9)", () => {
     const finalists = review(s).filter((r) => r.group === "final");
     expect(finalists).toHaveLength(2);
     expect(finalists.every((r) => r.delta === -3 && /^Reached the Final v /.test(r.story))).toBe(true);
+    // Both semis decided and the final set: a finished night, so both read "final" (O-29).
+    expect(finalists.every((r) => r.finish === "final")).toBe(true);
+    expect(unplayedFinal(s)).not.toBeNull();
   });
 
   it("clamps at the −100 floor and the 200 ceiling", () => {

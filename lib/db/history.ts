@@ -16,6 +16,8 @@ export interface NightSummary {
   winner_name: string | null;
   /** The player beaten in the final, or null when the title came by free pass or the night was abandoned. */
   runner_up_name: string | null;
+  /** Both players of a final that was set but not played: a finished night with no winner (O-29). */
+  finalist_names: [string, string] | null;
 }
 
 export interface NightRatingChange {
@@ -55,7 +57,12 @@ export async function competitionHistory(q: Queryable, limit = 52): Promise<Comp
           join entries le on le.id = case when m.winner_id = m.player_a_id then m.player_b_id else m.player_a_id end
           join players lp on lp.id = le.player_id
         where m.competition_id = c.id and m.state = 'finished' and m.winner_id = c.winner_entry_id
-        order by m.round desc limit 1) as runner_up_name
+        order by m.round desc limit 1) as runner_up_name,
+       (select array[pa.name, pb.name] from matches m
+          join entries ea on ea.id = m.player_a_id join players pa on pa.id = ea.player_id
+          join entries eb on eb.id = m.player_b_id join players pb on pb.id = eb.player_id
+        where m.competition_id = c.id and c.status = 'complete' and c.winner_entry_id is null and m.state <> 'finished'
+          and m.round = round(log(2, c.bracket_size))::int) as finalist_names
      from competitions c
      left join entries we on we.id = c.winner_entry_id
      left join players wp on wp.id = we.player_id

@@ -16,6 +16,7 @@ import {
   openSlots,
   positionOf,
   roundsFor,
+  unplayedFinal,
   waitingEntries,
   type Position,
 } from "@/lib/logic/derive";
@@ -120,8 +121,10 @@ export interface BracketPayload {
     /** Empty round-one slots not under a decided box: where the override screen can move a player (spec 5.10, O-17). */
     open_places: number[];
     winner: EntryView | null;
-    /** Complete with no champion: the night was ended early on time (spec 5.11). */
+    /** Complete with no champion and the final never set: the night was ended early on time (spec 5.11). */
     ended_early: boolean;
+    /** Complete with the final set but not played: both finalists, and the night counts as finished (O-29). */
+    finalists: [EntryView, EntryView] | null;
   };
   rounds: RoundView[];
   /** Every entry tonight with where it stands (the override screen lists these). */
@@ -233,6 +236,7 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date(), public
       boxes,
     });
   }
+  const finalists = unplayedFinal(s);
   return {
     server_now: now.toISOString(),
     version: iso(c.updated_at) ?? "",
@@ -257,7 +261,8 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date(), public
       open_slots: openSlots(s),
       open_places: inProgress ? openPlaces(s) : [],
       winner: c.winner_entry_id ? view(c.winner_entry_id) : null,
-      ended_early: c.status === "complete" && c.winner_entry_id === null,
+      ended_early: c.status === "complete" && c.winner_entry_id === null && !finalists,
+      finalists: finalists ? [view(finalists[0]), view(finalists[1])] : null,
     },
     rounds,
     entries: s.entries.map((e) => view(e.id)).sort((x, y) => x.name.localeCompare(y.name) || (x.buyback_seq ?? 0) - (y.buyback_seq ?? 0)),

@@ -159,7 +159,7 @@ export function useStoredChoice<T extends string>(key: string, fallback: T, serv
 
 /**
  * True on a screen wide enough to read the whole tree at once: a desktop, or a tablet in landscape.
- * Decides the default bracket view (spec 3.4, 3.8): tree on a wide screen, list on a phone. False during
+ * Decides the public page's default view (spec 3.8, O-28): tree on a wide screen, list on a phone. False during
  * the server render so hydration matches; the real answer arrives on the first client render.
  */
 const WIDE_SCREEN = "(min-width: 900px)";

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { bracketIsStale, type BracketPayload, type EntryView, type MatchView } from "@/lib/bracket/payload";
-import { BracketTree } from "./BracketTree";
+import { TreeViews } from "./ViewToggle";
 import { Btn, Spinner } from "./Btn";
 import { useDialog } from "./Dialog";
 import { call, get, post } from "./client/api";
@@ -117,8 +117,9 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
   };
   const livePlayerIds = new Set(b.entries.filter((e) => e.position.status !== "out").map((e) => e.player_id));
 
+  // Full width like every bracket screen (O-28), so the tree is drawn at its size.
   return (
-    <main className="medium">
+    <main>
       <h1>Master override</h1>
       <div className="notice">⚠ These actions skip the normal checks. Each one asks for confirmation and is logged.</div>
       {notice && <div className="info" onClick={() => setNotice(null)}>{notice}</div>}
@@ -155,7 +156,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
         </table>
       </div>
 
-      {/* Tree only (O-25): every match is reached through its box, every seat by dragging or clicking. */}
+      {/* Trees only (O-25, O-28): every match is reached through its box, every seat by dragging or clicking. */}
       <h2>Matches</h2>
       <div className="card">
           {pickedEntry ? (
@@ -167,7 +168,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
               Drag a player who has not played to an open seat, or click them and then the seat. Click a match to reset or delete it, or to replace or remove a player.
             </p>
           )}
-          <BracketTree
+          <TreeViews
             b={b}
             now={now}
             onSelect={(m) => setOpenMatch(m.id)}
