@@ -19,6 +19,7 @@ import * as abandon from "@/app/api/admin/competitions/[id]/abandon/route";
 import * as endNight from "@/app/api/admin/competitions/[id]/end/route";
 import * as ratingReview from "@/app/api/admin/competitions/[id]/rating-review/route";
 import * as adminActions from "@/app/api/admin/competitions/[id]/admin-actions/route";
+import * as nightPlayer from "@/app/api/admin/competitions/[id]/players/[playerId]/route";
 import * as ovEntries from "@/app/api/admin/competitions/[id]/override/entries/route";
 import * as ovEntryById from "@/app/api/admin/competitions/[id]/override/entries/[entryId]/route";
 import * as ovPair from "@/app/api/admin/competitions/[id]/override/pair/route";
@@ -94,14 +95,18 @@ export const api = {
     call<{ players: Array<{ id: string; name: string; rating: number; active: boolean }> }>(players.GET, "GET", `/api/admin/players${includeInactive ? "?include_inactive=1" : ""}`),
   createPlayer: (name: string, rating: number, contact: { phone?: string; email?: string } = {}) =>
     call<{ player: { id: string; name: string; rating: number; phone?: string | null; email?: string | null } }>(players.POST, "POST", "/api/admin/players", { body: { name, rating, ...contact } }),
+  getPlayer: (id: string) => call<{ player: { id: string; name: string; rating: number; updated_at: string } }>(playerById.GET, "GET", `/api/admin/players/${id}`, { params: { id } }),
+  /** Edit a player from tonight's bracket (O-26). */
+  patchNightPlayer: (id: string, playerId: string, body: unknown) =>
+    call<{ player: { id: string; name: string; rating: number }; notes: string[]; bracket: BracketPayload; error?: string; code?: string }>(nightPlayer.PATCH, "PATCH", `/api/admin/competitions/${id}/players/${playerId}`, { body, params: { id, playerId } }),
   patchPlayer: (id: string, body: unknown) => call<{ player: { id: string; rating: number; active: boolean } }>(playerById.PATCH, "PATCH", `/api/admin/players/${id}`, { body, params: { id } }),
   putPhoto: (id: string, bytes: Uint8Array, type: string, auth = true) => sendBytes(playerPhoto.PUT, "PUT", `/api/admin/players/${id}/photo`, { id }, bytes, type, auth),
   deletePhoto: (id: string) => call<{ player: { photo: string | null } }>(playerPhoto.DELETE, "DELETE", `/api/admin/players/${id}/photo`, { params: { id } }),
   getPhoto: (id: string, auth = true) => sendBytes(playerPhoto.GET, "GET", `/api/admin/players/${id}/photo`, { id }, undefined, undefined, auth),
   ratingHistory: (id: string) => call<{ history: Array<{ old_rating: number | null; new_rating: number; changed_by: string }> }>(ratingHistory.GET, "GET", `/api/admin/players/${id}/rating-history`, { params: { id } }),
-  competitions: () => call<{ competitions: Array<{ id: string; status: string; rating_top_count: number }> }>(competitions.GET, "GET", "/api/admin/competitions"),
+  competitions: () => call<{ competitions: Array<{ id: string; status: string; rating_final_delta: number }> }>(competitions.GET, "GET", "/api/admin/competitions"),
   createCompetition: (body: unknown = {}) =>
-    call<{ competition: { id: string; name: string; bracket_size: number; rating_top_count: number; rating_bottom_delta: number }; bracket: BracketPayload }>(competitions.POST, "POST", "/api/admin/competitions", { body }),
+    call<{ competition: { id: string; name: string; bracket_size: number; rating_scheme: string; rating_final_delta: number; rating_other_delta: number }; bracket: BracketPayload }>(competitions.POST, "POST", "/api/admin/competitions", { body }),
   getCompetition: (id: string) => call<BracketPayload>(competitionById.GET, "GET", `/api/admin/competitions/${id}`, { params: { id } }),
   patchCompetition: (id: string, body: unknown) => call<{ bracket: BracketPayload }>(competitionById.PATCH, "PATCH", `/api/admin/competitions/${id}`, { body, params: { id } }),
   addEntry: (id: string, body: unknown) => call<{ entry_id: string; match_number: number | null; awaiting_in: number | null; bracket: BracketPayload }>(entries.POST, "POST", `/api/admin/competitions/${id}/entries`, { body, params: { id } }),
@@ -114,8 +119,8 @@ export const api = {
   abandon: (id: string) => call(abandon.POST, "POST", `/api/admin/competitions/${id}/abandon`, { params: { id } }),
   endNight: (id: string, body: unknown = {}) =>
     call<{ unplayed: number; clocks_cancelled: number; still_in: string[]; bracket?: BracketPayload }>(endNight.POST, "POST", `/api/admin/competitions/${id}/end`, { body, params: { id } }),
-  ratingReview: (id: string) => call<{ rows: Array<{ player_id: string; name: string; current_rating: number; proposed_rating: number; delta: number; group: string; finish: string }> }>(ratingReview.GET, "GET", `/api/admin/competitions/${id}/rating-review`, { params: { id } }),
-  saveRatingReview: (id: string, changes: Array<{ player_id: string; new_rating: number }>) => call<{ written: number }>(ratingReview.POST, "POST", `/api/admin/competitions/${id}/rating-review`, { body: { changes }, params: { id } }),
+  ratingReview: (id: string) => call<{ rows: Array<{ player_id: string; name: string; current_rating: number; proposed_rating: number; delta: number; group: string; finish: string; story: string; bought_back: boolean; tonight_change: { from: number; to: number } | null; saved_change: { from: number; to: number } | null }>; competition: { rating_review_saved_at: string | null; rating_review_saved_by: string | null } }>(ratingReview.GET, "GET", `/api/admin/competitions/${id}/rating-review`, { params: { id } }),
+  saveRatingReview: (id: string, changes: Array<{ player_id: string; new_rating: number }>) => call<{ written: number; code?: string; error?: string }>(ratingReview.POST, "POST", `/api/admin/competitions/${id}/rating-review`, { body: { changes }, params: { id } }),
   adminActions: (id: string) => call<{ actions: Array<{ actor: string; action: string; details: Record<string, unknown> }> }>(adminActions.GET, "GET", `/api/admin/competitions/${id}/admin-actions`, { params: { id } }),
   patchMatch: (id: string, body: unknown) => call<{ bracket: BracketPayload }>(matchById.PATCH, "PATCH", `/api/admin/matches/${id}`, { body, params: { id } }),
   /** A write as a screen sends it (spec 7.8): which tab, and the bracket version it shows. */

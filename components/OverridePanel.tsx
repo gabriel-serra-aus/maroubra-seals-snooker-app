@@ -9,8 +9,7 @@ import { Btn, Spinner } from "./Btn";
 import { useDialog } from "./Dialog";
 import { call, get, post } from "./client/api";
 import { fmtDateTime, fmtRating } from "./client/format";
-import { useAction, useBracketScreen, usePoll, useServerClock, useStoredChoice } from "./client/hooks";
-import { ViewToggle, type BracketViewMode } from "./ViewToggle";
+import { useAction, useBracketScreen, usePoll, useServerClock } from "./client/hooks";
 
 interface ActionRow {
   id: string;
@@ -51,7 +50,6 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
   const { data: b, setData } = usePoll<BracketPayload>("/api/admin/bracket", 5_000, initial, bracketIsStale);
   useBracketScreen(b, setData);
   const now = useServerClock(b.server_now);
-  const [view, setView] = useStoredChoice<BracketViewMode>("override-view", "tree", "tree");
   // The player picked to move (O-17), and the match whose card a tree box opened.
   const [picked, setPicked] = useState<string | null>(null);
   const [openMatch, setOpenMatch] = useState<string | null>(null);
@@ -157,19 +155,16 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
         </table>
       </div>
 
-      <div className="row between">
-        <h2>Matches</h2>
-        <ViewToggle value={view} onChange={setView} />
-      </div>
-      {view === "tree" ? (
-        <div className="card">
+      {/* Tree only (O-25): every match is reached through its box, every seat by dragging or clicking. */}
+      <h2>Matches</h2>
+      <div className="card">
           {pickedEntry ? (
             <div className="info move-hint">
               Moving <strong>{pickedEntry.name}</strong>: click an open seat · Esc to cancel
             </div>
           ) : (
             <p className="muted small">
-              Drag a player who has not played to an open seat, or click them and then the seat. Click a match to reset, delete or replace a player.
+              Drag a player who has not played to an open seat, or click them and then the seat. Click a match to reset or delete it, or to replace or remove a player.
             </p>
           )}
           <BracketTree
@@ -178,14 +173,8 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
             onSelect={(m) => setOpenMatch(m.id)}
             seats={c.status === "in_progress" ? { selected: picked, onPick: (e) => setPicked(e?.entry_id ?? null), onMove: moveTo } : undefined}
           />
-        </div>
-      ) : null}
+      </div>
       <div className="card">
-        {view === "list" && allMatches.length === 0 && <p className="muted">No matches.</p>}
-        {view === "list" &&
-          allMatches.map((m) => (
-            <MatchRow key={m.id} m={m} waiting={waiting.filter((w) => w.position.round === m.round)} busy={busy} isPending={isPending} override={override} />
-          ))}
         <h3>Pair two waiting players</h3>
         <p className="muted small">From round two the two must share the same place in the tree (spec 5.4); in round one any two waiting players can be paired.</p>
         <div className="row">
@@ -289,7 +278,7 @@ export function OverridePanel({ initial, initialActions }: { initial: BracketPay
               <h2 style={{ margin: 0, border: 0 }}>{selected.label}</h2>
               <Btn className="sm" onClick={() => setOpenMatch(null)}>Close</Btn>
             </div>
-            <MatchRow m={selected} waiting={waiting.filter((w) => w.position.round === selected.round)} busy={busy} isPending={isPending} override={override} />
+            <MatchRow m={selected} compId={compId} waiting={waiting.filter((w) => w.position.round === selected.round)} busy={busy} isPending={isPending} override={override} />
           </div>
         </div>
       )}
@@ -305,7 +294,7 @@ function summarise(d: Record<string, unknown>): string {
     .join(" · ");
 }
 
-function MatchRow({ m, waiting, busy, isPending, override }: { m: MatchView; waiting: EntryView[]; busy: boolean; isPending: (key: string) => boolean; override: (label: string, method: string, path: string, body?: Record<string, unknown>) => Promise<boolean> }) {
+function MatchRow({ m, compId, waiting, busy, isPending, override }: { m: MatchView; compId: string; waiting: EntryView[]; busy: boolean; isPending: (key: string) => boolean; override: (label: string, method: string, path: string, body?: Record<string, unknown>) => Promise<boolean> }) {
   const [side, setSide] = useState<"a" | "b">("a");
   const [replacement, setReplacement] = useState("");
   const stateIcon = m.state === "in_play" ? "●" : m.state === "finished" ? "■" : "○";
@@ -319,6 +308,14 @@ function MatchRow({ m, waiting, busy, isPending, override }: { m: MatchView; wai
         </span>
       </div>
       <div className="small">{m.a.name}{m.winner_id === m.a.entry_id ? " ✔" : ""} v {m.b.name}{m.winner_id === m.b.entry_id ? " ✔" : ""}</div>
+      {/* Remove a player, from their match box (spec 3.9, O-25). */}
+      <div className="row small" style={{ marginTop: 4 }}>
+        {[m.a, m.b].filter((e) => e.position.status !== "out").map((e) => (
+          <ActBtn key={e.entry_id} label={`Remove ${e.name} from the night`} isPending={isPending} busy={busy} className="sm danger" onClick={() => override(`Remove ${e.name} from the night`, "DELETE", `/api/admin/competitions/${compId}/override/entries/${e.entry_id}`)}>
+            Remove {e.name}
+          </ActBtn>
+        ))}
+      </div>
       {m.state !== "finished" && waiting.length > 0 && (
         <div className="row small" style={{ marginTop: 4 }}>
           Replace

@@ -3,8 +3,8 @@ import { RatingReview } from "@/components/RatingReview";
 import { currentSession } from "@/lib/auth/server";
 import { getDb } from "@/lib/db/client";
 import { listCompetitions } from "@/lib/db/competitions";
-import { getCompetition, loadSnapshot } from "@/lib/db/snapshot";
-import { ratingReview } from "@/lib/logic/ratings";
+import { loadReview } from "@/lib/db/review";
+import { getCompetition } from "@/lib/db/snapshot";
 
 export const dynamic = "force-dynamic";
 
@@ -32,19 +32,11 @@ export default async function RatingsPage({ searchParams }: { searchParams: Prom
       </main>
     );
   }
-  const s = await loadSnapshot(db, c);
+  const review = await loadReview(db, c);
   return (
     <RatingReview
-      competition={{
-        id: c.id,
-        name: c.name,
-        completed_at: c.completed_at ? new Date(c.completed_at).toISOString() : null,
-        rating_top_count: c.rating_top_count,
-        rating_top_delta: c.rating_top_delta,
-        rating_bottom_count: c.rating_bottom_count,
-        rating_bottom_delta: c.rating_bottom_delta,
-      }}
-      rows={ratingReview(s)}
+      competition={review.competition}
+      rows={review.rows}
       others={completed.filter((x) => x.id !== c.id).map((x) => ({ id: x.id, name: x.name }))}
       signedInAs={session?.name ?? ""}
     />

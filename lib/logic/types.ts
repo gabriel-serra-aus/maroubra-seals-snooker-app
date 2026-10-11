@@ -11,6 +11,7 @@ export type BuybackDecision = "bought_back" | "declined" | "no_slots";
 /** How a match came to exist: the draw, a buy-back placement, Force Pair, a close, advancement up the tree, a correction, an override. */
 export type MatchOrigin = "draw" | "placement" | "force_pair" | "close" | "advance" | "correction" | "override";
 export type BracketSize = 16 | 32;
+export type RatingScheme = "groups" | "finish";
 
 export interface PlayerRow {
   id: string;
@@ -29,10 +30,17 @@ export interface CompetitionRow {
   default_time_limit_minutes: number;
   /** Snooker tables the club plays on tonight, numbered 1..table_count (spec 5.14). */
   table_count: number;
+  /** `finish` (O-24): a change per finishing position. `groups`: the O-1 top/bottom groups, kept for nights reviewed under it. */
+  rating_scheme: RatingScheme;
   rating_top_count: number;
   rating_top_delta: number;
   rating_bottom_count: number;
   rating_bottom_delta: number;
+  /** The O-24 changes (spec 5.9): reached the final, lost the semi-final, bought back and lost again, everyone else. */
+  rating_final_delta: number;
+  rating_semi_delta: number;
+  rating_buyback_lost_delta: number;
+  rating_other_delta: number;
   started_at: Date | null;
   buybacks_closed_at: Date | null;
   completed_at: Date | null;
@@ -43,6 +51,9 @@ export interface CompetitionRow {
   updated_at: Date;
   /** The organiser and the device (a random id per open tab) behind that last write (spec 7.8, O-22). */
   updated_by?: string | null;
+  /** When and by whom the end-of-night review was saved; it saves once (spec 3.7, O-27). */
+  rating_review_saved_at?: Date | null;
+  rating_review_saved_by?: string | null;
   updated_by_client?: string | null;
 }
 

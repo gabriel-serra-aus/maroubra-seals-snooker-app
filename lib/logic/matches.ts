@@ -10,6 +10,7 @@ import {
   matchNumberForSlot,
   numberLabel,
   pickFreeSlot,
+  playerName,
   playerRating,
 } from "./derive";
 import type { Ctx, EntryRow, MatchOrigin, MatchRow, Snapshot } from "./types";
@@ -65,6 +66,26 @@ export function refreshStart(s: Snapshot, m: MatchRow): void {
   const start = handicapStart(m.rating_a, m.rating_b);
   m.start_points = start.points;
   m.start_entry_id = start.to === "a" ? m.player_a_id : start.to === "b" ? m.player_b_id : null;
+}
+
+/**
+ * A player's rating changed during the night (O-26, spec 5.6): every match of theirs not yet finished takes
+ * the new rating and its start is worked out again; a finished match keeps the ratings it was played on.
+ * Returns a note for each start that moved, e.g. "R1M2: Alice Chen now starts on 12 (was 17)".
+ */
+export function refreshPlayerStarts(s: Snapshot, playerId: string): string[] {
+  const notes: string[] = [];
+  const mine = new Set(s.entries.filter((e) => e.player_id === playerId).map((e) => e.id));
+  for (const m of s.matches) {
+    if (m.state === "finished" || !(mine.has(m.player_a_id) || mine.has(m.player_b_id))) continue;
+    const was = { points: m.start_points, to: m.start_entry_id };
+    refreshStart(s, m);
+    if (was.points === m.start_points && was.to === m.start_entry_id) continue;
+    const label = numberLabel(s.competition.bracket_size, m.number);
+    const before = was.to ? `${was.points} for ${playerName(s, was.to)}` : "level";
+    notes.push(m.start_entry_id ? `${label}: ${playerName(s, m.start_entry_id)} now starts on ${m.start_points} (was ${before})` : `${label}: now level, no start (was ${before})`);
+  }
+  return notes;
 }
 
 /**

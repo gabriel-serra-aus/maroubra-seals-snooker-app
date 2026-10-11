@@ -83,7 +83,11 @@ export interface PlayerPatch {
  * Rename, rating override and activate/deactivate (spec 7.3). A rename keeps names unique ignoring case and is
  * logged naming the organiser (O-8); contact details are just stored (O-23). Deactivation is refused while they are in a live night (O-9).
  */
-export async function updatePlayer(q: Queryable, id: string, patch: PlayerPatch, changedBy: string): Promise<PlayerRecord> {
+export async function updatePlayer(
+  q: Queryable, id: string, patch: PlayerPatch, changedBy: string,
+  /** The live night, when the edit comes from its bracket (O-26): the rating may change, recorded against that night. */
+  tonight?: string,
+): Promise<PlayerRecord> {
   const player = await getPlayer(q, id, true);
   if (patch.expectedUpdatedAt !== undefined && patch.expectedUpdatedAt !== new Date(player.updated_at).toISOString()) {
     throw new AppError(409, `${player.name} was changed on another screen since you opened it. It has been reloaded — check it and save again.`, {
@@ -97,8 +101,17 @@ export async function updatePlayer(q: Queryable, id: string, patch: PlayerPatch,
     await insertAdminActions(q, null, changedBy, [{ action: "rename_player", details: { player_id: id, from: player.name, to: patch.name } }]);
   }
   if (patch.rating !== undefined && patch.rating !== player.rating) {
+    // A player in a night under way has their handicap changed from that night's bracket, where the starts
+    // of their unfinished matches follow it (O-26); the club list refuses it.
+    if (!tonight) {
+      const live = await q.query(
+        `select 1 from entries e join competitions c on c.id = e.competition_id where e.player_id = $1 and c.status = 'in_progress'`,
+        [id],
+      );
+      if (live.length) throw new AppError(409, `${player.name} is playing tonight — change the handicap from the competition tree.`, { code: "playing_tonight" });
+    }
     await insertRatingChange(q, {
-      player_id: id, competition_id: null, old_rating: player.rating, new_rating: patch.rating, changed_by: changedBy, reason: patch.reason ?? null,
+      player_id: id, competition_id: tonight ?? null, old_rating: player.rating, new_rating: patch.rating, changed_by: changedBy, reason: patch.reason ?? null,
     });
     await q.query("update players set rating = $2, updated_at = now() where id = $1", [id, patch.rating]);
   }
@@ -119,6 +132,37 @@ export async function updatePlayer(q: Queryable, id: string, patch: PlayerPatch,
     await q.query("update players set active = $2, deactivated_at = case when $2 then null else now() end, updated_at = now() where id = $1", [id, patch.active]);
   }
   return getPlayer(q, id);
+}
+
+/**
+ * Ratings changed during a night, before it was complete (spec 3.7, O-26): first old and last new value per
+ * player, so the review can show "rated 30 → 28 tonight" beside the end-of-night proposal.
+ */
+export async function tonightRatingChanges(
+  q: Queryable, competitionId: string, completedAt: Date | null, when: "during" | "after" = "during",
+): Promise<Map<string, { from: number; to: number }>> {
+  // "after": what the review wrote (O-27) — every change against the night once it was complete.
+  const rows = await q.query<{ player_id: string; old_rating: number | null; new_rating: number }>(
+    `select player_id, old_rating, new_rating from rating_changes
+     where competition_id = $1 and ${when === "during" ? "($2::timestamptz is null or changed_at <= $2)" : "changed_at > $2"}
+     order by changed_at, id`,
+    [competitionId, completedAt],
+  );
+  const out = new Map<string, { from: number; to: number }>();
+  for (const r of rows) {
+    const cur = out.get(r.player_id);
+    out.set(r.player_id, { from: cur?.from ?? r.old_rating ?? r.new_rating, to: r.new_rating });
+  }
+  return out;
+}
+
+/** Players entered in a night under way: their handicap is changed from its bracket, not the club list (O-26). */
+export async function playingTonight(q: Queryable): Promise<string[]> {
+  const rows = await q.query<{ player_id: string }>(
+    `select distinct e.player_id from entries e join competitions c on c.id = e.competition_id where c.status = 'in_progress'`,
+    [],
+  );
+  return rows.map((r) => r.player_id);
 }
 
 export async function ratingHistory(q: Queryable, playerId: string): Promise<RatingChangeRow[]> {

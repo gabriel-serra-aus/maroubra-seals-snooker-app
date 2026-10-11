@@ -1,6 +1,6 @@
 // GET /api/admin/competitions (recent nights) and POST /api/admin/competitions (spec 7.4).
 import { getDb } from "@/lib/db/client";
-import { createCompetition, listCompetitions, previousRatingSettings } from "@/lib/db/competitions";
+import { RATING_SETTING_KEYS, createCompetition, listCompetitions, previousRatingSettings } from "@/lib/db/competitions";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { defaultCompetitionName } from "@/lib/api/routes";
@@ -30,12 +30,7 @@ export const POST = handle(async (request) => {
       bracket_size: size,
       default_time_limit_minutes: optionalInt(body, "default_time_limit_minutes", 1, 180) ?? 25,
       table_count: optionalInt(body, "table_count", 1, 16) ?? prev.table_count,
-      rating: {
-        rating_top_count: optionalInt(body, "rating_top_count", 0, 64) ?? prev.rating_top_count,
-        rating_top_delta: optionalInt(body, "rating_top_delta", -50, 50) ?? prev.rating_top_delta,
-        rating_bottom_count: optionalInt(body, "rating_bottom_count", 0, 64) ?? prev.rating_bottom_count,
-        rating_bottom_delta: optionalInt(body, "rating_bottom_delta", -50, 50) ?? prev.rating_bottom_delta,
-      },
+      rating: Object.fromEntries(RATING_SETTING_KEYS.map((k) => [k, optionalInt(body, k, -50, 50) ?? prev[k]])) as Record<(typeof RATING_SETTING_KEYS)[number], number>,
     });
     return { competition, bracket: buildBracketPayload(await loadSnapshot(tx, competition)) };
   });

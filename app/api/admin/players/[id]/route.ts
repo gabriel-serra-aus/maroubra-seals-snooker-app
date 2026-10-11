@@ -1,11 +1,21 @@
-// PATCH /api/admin/players/{id} { expected_updated_at?, name?, rating?, reason?, active?, phone?, email? } (spec 7.3, 7.8). There is no DELETE (O-9).
+// GET and PATCH /api/admin/players/{id} { expected_updated_at?, name?, rating?, reason?, active?, phone?, email? } (spec 7.3, 7.8). There is no DELETE (O-9).
 import { getDb } from "@/lib/db/client";
-import { updatePlayer } from "@/lib/db/players";
+import { getPlayer, updatePlayer } from "@/lib/db/players";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { optionalBool, optionalEmail, optionalPhone, optionalRating, optionalString } from "@/lib/api/validate";
 import { badRequest } from "@/lib/logic/errors";
 import { photoUrl } from "@/lib/bracket/payload";
+
+export const dynamic = "force-dynamic";
+
+/** One player, for the edit sheet opened from tonight's bracket (spec 3.4, O-26). */
+export const GET = handle(async (request, { params }) => {
+  requireAdmin(request);
+  const { id } = await params;
+  const player = await getPlayer(await getDb(), id);
+  return json({ player: { ...player, photo: photoUrl(player) } });
+});
 
 export const PATCH = handle(async (request, { params }) => {
   const session = requireAdmin(request);

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminBracket } from "@/components/AdminBracket";
+import { currentSession } from "@/lib/auth/server";
 import { buildBracketPayload } from "@/lib/bracket/payload";
 import { getDb } from "@/lib/db/client";
 import { findCurrentCompetition, findLiveCompetition, loadSnapshot } from "@/lib/db/snapshot";
@@ -14,5 +15,6 @@ export default async function AdminPage() {
   const c = live ?? (await findCurrentCompetition(db));
   if (!c || c.status === "abandoned") redirect("/admin/setup");
   const payload = buildBracketPayload(await loadSnapshot(db, c));
-  return <AdminBracket initial={payload} />;
+  const session = await currentSession();
+  return <AdminBracket initial={payload} signedInAs={session?.name ?? ""} />;
 }

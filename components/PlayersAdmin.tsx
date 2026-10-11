@@ -32,7 +32,7 @@ interface HistoryRow {
 }
 
 /** Players and ratings (spec 3.2). Never deletes (O-9). */
-export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; signedInAs: string }) {
+export function PlayersAdmin({ initial, playing, signedInAs }: { initial: ClubPlayer[]; playing: string[]; signedInAs: string }) {
   const [players, setPlayers] = useState(initial);
   const [q, setQ] = useState("");
   const [showInactive, setShowInactive] = useState(false);
@@ -50,6 +50,7 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
       <td>
         <Avatar id={p.id} name={p.name} photo={p.photo} size={36} /> {p.name}
         {!p.active && <span className="muted"> (inactive)</span>}
+        {playing.includes(p.id) && <> <span className="tag">playing tonight</span></>}
       </td>
       <td className="num">{fmtRating(p.rating)}</td>
       <td className="num">
@@ -92,11 +93,14 @@ export function PlayersAdmin({ initial, signedInAs }: { initial: ClubPlayer[]; s
           {showInactive && inactive.map((p) => <Row key={p.id} p={p} />)}
         </tbody>
       </table>
-      <p className="muted small">Lower is better and ratings can go below zero. Changing a rating never changes a match already drawn tonight.</p>
+      <p className="muted small">
+        Lower is better and ratings can go below zero. A player in tonight&apos;s competition has their handicap changed from the competition tree (O-26).
+      </p>
       {editing && (
         <EditSheet
           p={editing}
           signedInAs={signedInAs}
+          ratingLocked={playing.includes(editing.id)}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); setNotice(null); await reload(); }}
           onStale={async (msg) => { setEditing(null); setNotice(msg); await reload(); }}
@@ -199,7 +203,12 @@ function PhotoField({ p, onPhoto }: { p: ClubPlayer; onPhoto: (p: ClubPlayer) =>
   );
 }
 
-function EditSheet({ p, signedInAs, onClose, onSaved, onStale, onPhoto }: { p: ClubPlayer; signedInAs: string; onClose: () => void; onSaved: () => Promise<void>; onStale: (message: string) => Promise<void>; onPhoto: (p: ClubPlayer) => void }) {
+/**
+ * The player's edit card (spec 3.2). Opened from the bracket (O-26) it saves through the night's route, so the
+ * starts of their unfinished matches follow a new rating and the reply carries the fresh bracket; opened from
+ * the club list for a player in tonight's night, the rating is locked.
+ */
+export function EditSheet<R = unknown>({ p, signedInAs, ratingLocked, competitionId, onClose, onSaved, onStale, onPhoto }: { p: ClubPlayer; signedInAs: string; ratingLocked?: boolean; competitionId?: string; onClose: () => void; onSaved: (reply: R) => void | Promise<void>; onStale: (message: string) => void | Promise<void>; onPhoto: (p: ClubPlayer) => void }) {
   const [name, setName] = useState(p.name);
   const [rating, setRating] = useState(String(p.rating));
   const [reason, setReason] = useState("");
@@ -216,14 +225,16 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onStale, onPhoto }: { p: C
       const r = Number(rating);
       if (!Number.isInteger(r)) throw new Error("Rating must be a whole number");
       if (!name.trim()) throw new Error("Enter a name");
+      let reply: R;
       try {
-        await patch(`/api/admin/players/${p.id}`, { expected_updated_at: p.updated_at, name: name.trim(), rating: r, reason: reason.trim() || undefined, active, phone, email });
+        const body = { expected_updated_at: p.updated_at, name: name.trim(), rating: ratingLocked ? undefined : r, reason: reason.trim() || undefined, active, phone, email };
+        reply = await patch<R & Record<string, unknown>>(competitionId ? `/api/admin/competitions/${competitionId}/players/${p.id}` : `/api/admin/players/${p.id}`, body);
       } catch (e) {
         // Changed on another screen since this sheet opened (spec 7.8): show the latest instead of overwriting it.
         if (e instanceof ApiError && e.body.code === "stale") return onStale(e.message);
         throw e;
       }
-      await onSaved();
+      await onSaved(reply);
     });
   return (
     <div className="sheet-backdrop" onClick={busy ? undefined : onClose}>
@@ -236,7 +247,9 @@ function EditSheet({ p, signedInAs, onClose, onSaved, onStale, onPhoto }: { p: C
         </label>
         <label className="field">
           <span>Rating</span>
-          <input type="number" value={rating} onChange={(e) => setRating(e.target.value)} />
+          <input type="number" value={rating} disabled={ratingLocked} onChange={(e) => setRating(e.target.value)} />
+          {ratingLocked && <span className="muted small">Playing tonight — change the handicap from the competition tree.</span>}
+          {competitionId && <span className="muted small">A new rating changes the start of their matches not yet finished; finished ones stay as played.</span>}
         </label>
         <label className="field">
           <span>Reason</span>

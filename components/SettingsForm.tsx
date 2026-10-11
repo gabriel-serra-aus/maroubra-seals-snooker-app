@@ -11,6 +11,14 @@ import { useAction, useBracketScreen } from "./client/hooks";
 /** Settings (spec 3.10): the match time limit, the club's tables and the rating-adjustment scale, off the setup page. */
 const ignoreFresh = () => {};
 
+/** The four O-24 numbers (spec 3.10), in the order the review groups them. */
+const DELTAS = [
+  ["rating_final_delta", "reached the final"],
+  ["rating_semi_delta", "reached the semi-final and lost it"],
+  ["rating_buyback_lost_delta", "lost in round one, bought back, lost again"],
+  ["rating_other_delta", "everyone else"],
+] as const;
+
 export function SettingsForm({ competition }: { competition: BracketPayload | null }) {
   const router = useRouter();
   const c = competition?.competition ?? null;
@@ -19,24 +27,21 @@ export function SettingsForm({ competition }: { competition: BracketPayload | nu
   const [form, setForm] = useState({
     default_time_limit_minutes: c?.default_time_limit_minutes ?? 25,
     table_count: c?.table_count ?? 4,
-    rating_top_count: c?.rating_top_count ?? 3,
-    rating_top_delta: c?.rating_top_delta ?? -1,
-    rating_bottom_count: c?.rating_bottom_count ?? 3,
-    rating_bottom_delta: c?.rating_bottom_delta ?? 2,
+    rating_final_delta: c?.rating_final_delta ?? -3,
+    rating_semi_delta: c?.rating_semi_delta ?? -2,
+    rating_buyback_lost_delta: c?.rating_buyback_lost_delta ?? 2,
+    rating_other_delta: c?.rating_other_delta ?? 1,
   });
   const { busy, error, run, setError } = useAction();
   const [saved, setSaved] = useState(false);
-  const locked = c?.status !== "setup";
+  const locked = c?.status !== "setup" || c?.rating_scheme !== "finish";
 
   const save = () =>
     run(async () => {
       if (!c) return;
       const body: Record<string, number> = { default_time_limit_minutes: form.default_time_limit_minutes, table_count: form.table_count };
       if (!locked) {
-        body.rating_top_count = form.rating_top_count;
-        body.rating_top_delta = form.rating_top_delta;
-        body.rating_bottom_count = form.rating_bottom_count;
-        body.rating_bottom_delta = form.rating_bottom_delta;
+        for (const k of DELTAS) body[k[0]] = form[k[0]];
       }
       await patch(`/api/admin/competitions/${c.id}`, body);
       setSaved(true);
@@ -67,17 +72,14 @@ export function SettingsForm({ competition }: { competition: BracketPayload | nu
             <input className="inline" type="number" min={1} max={16} value={form.table_count} onChange={num("table_count")} />
           </label>
           <div className="field">
-            <span className="muted small">Rating adjustment (applied on the review after the night)</span>
-            <div className="row">
-              Top <input className="inline" type="number" min={0} disabled={locked} value={form.rating_top_count} onChange={num("rating_top_count")} /> finishers
-              <input className="inline" type="number" disabled={locked} value={form.rating_top_delta} onChange={num("rating_top_delta")} /> each
-            </div>
-            <div className="row" style={{ marginTop: 6 }}>
-              Bottom <input className="inline" type="number" min={0} disabled={locked} value={form.rating_bottom_count} onChange={num("rating_bottom_count")} /> finishers
-              <input className="inline" type="number" disabled={locked} value={form.rating_bottom_delta} onChange={num("rating_bottom_delta")} /> each
-            </div>
+            <span className="muted small">Rating change by how the night ended (proposed on the review after the night, O-24)</span>
+            {DELTAS.map(([key, label]) => (
+              <div className="row" key={key} style={{ marginTop: 6 }}>
+                <input className="inline" type="number" min={-50} max={50} disabled={locked} value={form[key]} onChange={num(key)} /> {label}
+              </div>
+            ))}
             <p className="muted small">
-              A good night brings your number down (−1), a bad night puts it up (+2).
+              Lower is better: minus is a good night. The final is usually not played, so both finalists get the same change.
               {locked && " The scale is locked once the night has started."}
             </p>
           </div>

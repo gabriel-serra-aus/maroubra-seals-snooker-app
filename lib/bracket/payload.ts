@@ -105,10 +105,12 @@ export interface BracketPayload {
     default_time_limit_minutes: number;
     /** Tables the club plays on tonight, 1..table_count (spec 5.14). */
     table_count: number;
-    rating_top_count: number;
-    rating_top_delta: number;
-    rating_bottom_count: number;
-    rating_bottom_delta: number;
+    /** The end-of-night scale (spec 3.10, O-24); `groups` only on a night begun under O-1. */
+    rating_scheme: "groups" | "finish";
+    rating_final_delta: number;
+    rating_semi_delta: number;
+    rating_buyback_lost_delta: number;
+    rating_other_delta: number;
     started_at: string | null;
     buybacks_closed_at: string | null;
     completed_at: string | null;
@@ -242,10 +244,11 @@ export function buildBracketPayload(s: Snapshot | null, now = new Date(), public
       rounds_total: R,
       default_time_limit_minutes: c.default_time_limit_minutes,
       table_count: c.table_count,
-      rating_top_count: c.rating_top_count,
-      rating_top_delta: c.rating_top_delta,
-      rating_bottom_count: c.rating_bottom_count,
-      rating_bottom_delta: c.rating_bottom_delta,
+      rating_scheme: c.rating_scheme,
+      rating_final_delta: c.rating_final_delta,
+      rating_semi_delta: c.rating_semi_delta,
+      rating_buyback_lost_delta: c.rating_buyback_lost_delta,
+      rating_other_delta: c.rating_other_delta,
       started_at: iso(c.started_at),
       buybacks_closed_at: iso(c.buybacks_closed_at),
       completed_at: iso(c.completed_at),

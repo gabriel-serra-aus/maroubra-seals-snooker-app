@@ -7,7 +7,7 @@ import type { BracketPayload } from "@/lib/bracket/payload";
 import { Btn } from "./Btn";
 import { useDialog } from "./Dialog";
 import { del, patch, post } from "./client/api";
-import { fmtRating } from "./client/format";
+import { fmtDelta, fmtRating } from "./client/format";
 import { useAction, useBracketScreen } from "./client/hooks";
 import { AddSheet, type ClubPlayer } from "./PlayersAdmin";
 
@@ -167,7 +167,7 @@ export function SetupForm({ competition, players, defaults }: { competition: Bra
         </div>
         {c && (
           <p className="muted small">
-            Match time limit: <strong>{c.default_time_limit_minutes} min</strong>. Tables: <strong>{c.table_count}</strong>. Rating adjustment: top {c.rating_top_count} by {c.rating_top_delta}, bottom {c.rating_bottom_count} by +{c.rating_bottom_delta}.{" "}
+            Match time limit: <strong>{c.default_time_limit_minutes} min</strong>. Tables: <strong>{c.table_count}</strong>. Rating change: final {fmtDelta(c.rating_final_delta)}, semi-final {fmtDelta(c.rating_semi_delta)}, bought back and lost again {fmtDelta(c.rating_buyback_lost_delta)}, everyone else {fmtDelta(c.rating_other_delta)}.{" "}
             <Link href="/admin/settings">Change ›</Link>
           </p>
         )}

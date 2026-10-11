@@ -18,7 +18,8 @@ const MATCH_COLS: (keyof MatchRow)[] = [
 const FREE_PASS_COLS: (keyof FreePassRow)[] = ["competition_id", "entry_id", "from_round", "granted_at"];
 const COMPETITION_COLS: (keyof CompetitionRow)[] = [
   "name", "status", "bracket_size", "default_time_limit_minutes", "table_count", "rating_top_count",
-  "rating_top_delta", "rating_bottom_count", "rating_bottom_delta", "started_at", "buybacks_closed_at",
+  "rating_top_delta", "rating_bottom_count", "rating_bottom_delta", "rating_final_delta", "rating_semi_delta",
+  "rating_buyback_lost_delta", "rating_other_delta", "started_at", "buybacks_closed_at",
   "completed_at", "abandoned_at", "winner_entry_id",
 ];
 

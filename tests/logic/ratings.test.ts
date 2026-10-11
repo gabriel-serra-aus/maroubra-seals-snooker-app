@@ -7,7 +7,7 @@ import { makeCtx, play, playRound, startNight, type NightOpts } from "./helpers"
 /** A full 16-player night: 13 first-draw, 3 buy-backs. The higher-rated (weaker) player always loses. */
 function fullNight(extra: Partial<NightOpts> = {}) {
   const ratings = [45, 20, 33, 30, 28, 41, 25, 36, 36, 28, 38, 22, 50];
-  const { s, ctx } = startNight({ bracket: 16, ratings, ...extra }, makeCtx(3));
+  const { s, ctx } = startNight({ bracket: 16, ratings, scheme: "groups", ...extra }, makeCtx(3));
   const strongerWins = (m: (typeof s.matches)[number]) => (m.rating_a <= m.rating_b ? "a" : "b");
   // First three losers buy back, the rest decline.
   let buybacks = 0;
@@ -70,7 +70,7 @@ describe("rating adjustment (rules 13, O-1, spec 5.9)", () => {
   });
 
   it("a winner's handicap crosses zero into negative; results clamp at −100 and 200", () => {
-    const { s, ctx } = startNight({ bracket: 16, ratings: [0, 30, -100, 200], topCount: 2, topDelta: -1, bottomCount: 2, bottomDelta: 2 });
+    const { s, ctx } = startNight({ bracket: 16, ratings: [0, 30, -100, 200], scheme: "groups", topCount: 2, topDelta: -1, bottomCount: 2, bottomDelta: 2 });
     // Force the draw: M1 = p1 (0) v p2 (30), M2 = p3 (−100) v p4 (200). Then p1 beats p3 in the final.
     const id = (p: string) => s.entries.find((e) => e.player_id === p)!.id;
     Object.assign(s.matches[0], { player_a_id: id("p1"), player_b_id: id("p2") });

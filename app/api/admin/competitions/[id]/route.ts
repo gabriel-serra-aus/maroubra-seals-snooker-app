@@ -4,6 +4,7 @@ import { handle, json, readJson } from "@/lib/api/respond";
 import { mutateCompetition, readSnapshot } from "@/lib/api/mutate";
 import { optionalInt, optionalString } from "@/lib/api/validate";
 import { buildBracketPayload } from "@/lib/bracket/payload";
+import { RATING_SETTING_KEYS } from "@/lib/db/competitions";
 import { conflict, notFound } from "@/lib/logic/errors";
 import { setTableCount } from "@/lib/logic/tables";
 
@@ -26,12 +27,8 @@ export const PATCH = handle(async (request, { params }) => {
   if (size !== undefined && size !== 16 && size !== 32) return json({ error: "bracket_size must be 16 or 32" }, { status: 400 });
   const limit = optionalInt(body, "default_time_limit_minutes", 1, 180);
   const tables = optionalInt(body, "table_count", 1, 16);
-  const rating = {
-    rating_top_count: optionalInt(body, "rating_top_count", 0, 64),
-    rating_top_delta: optionalInt(body, "rating_top_delta", -50, 50),
-    rating_bottom_count: optionalInt(body, "rating_bottom_count", 0, 64),
-    rating_bottom_delta: optionalInt(body, "rating_bottom_delta", -50, 50),
-  };
+  // The O-24 changes (spec 3.10); the O-1 group numbers are no longer set.
+  const rating = Object.fromEntries(RATING_SETTING_KEYS.map((k) => [k, optionalInt(body, k, -50, 50)]));
   const r = await mutateCompetition(session, { competitionId: id }, (s) => {
     const c = s.competition;
     if (c.status === "complete" || c.status === "abandoned") throw conflict("This competition is over");
@@ -44,7 +41,7 @@ export const PATCH = handle(async (request, { params }) => {
       if (s.entries.length > size) throw conflict(`${s.entries.length} players are entered — they do not fit a ${size} bracket`);
       c.bracket_size = size;
     }
-    for (const [k, v] of Object.entries(rating)) if (v !== undefined) c[k as keyof typeof rating] = v;
+    for (const k of RATING_SETTING_KEYS) if (rating[k] !== undefined) c[k] = rating[k];
   });
   return json({ ok: true, bracket: r.bracket });
 });

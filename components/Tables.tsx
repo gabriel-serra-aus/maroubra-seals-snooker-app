@@ -2,6 +2,7 @@
 
 import type { BracketPayload, MatchView } from "@/lib/bracket/payload";
 import { formatRemaining, matchClock } from "@/lib/timer";
+import { shortName } from "@/lib/names";
 import { Btn } from "./Btn";
 
 type TableState = { n: number; match: MatchView | null };
@@ -20,11 +21,6 @@ export function tableStates(b: BracketPayload, claims?: TableClaims): TableState
   const claimed = (n: number) => all.find((m) => claims?.get(m.id) === n) ?? null;
   return Array.from({ length: c.table_count }, (_, i) => i + 1).map((n) => ({ n, match: live.find((m) => m.table_number === n) ?? claimed(n) }));
 }
-
-const shortName = (name: string) => {
-  const parts = name.trim().split(/\s+/);
-  return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1][0]}.` : name;
-};
 
 /**
  * One table card, the same everywhere it appears (strip, Start, Move): "Table 1 - FREE", or

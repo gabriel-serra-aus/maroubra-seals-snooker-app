@@ -16,6 +16,8 @@ export function makeCtx(seed = 1): Ctx {
 export interface NightOpts {
   bracket: BracketSize;
   ratings: number[];
+  /** Defaults to O-24; the O-1 tests pass "groups". */
+  scheme?: "groups" | "finish";
   topCount?: number;
   topDelta?: number;
   bottomCount?: number;
@@ -34,6 +36,11 @@ export function setupNight(opts: NightOpts, ctx = makeCtx()): { s: Snapshot; ctx
       bracket_size: opts.bracket,
       default_time_limit_minutes: 25,
       table_count: opts.tables ?? 4,
+      rating_scheme: opts.scheme ?? "finish",
+      rating_final_delta: -3,
+      rating_semi_delta: -2,
+      rating_buyback_lost_delta: 2,
+      rating_other_delta: 1,
       rating_top_count: opts.topCount ?? 3,
       rating_top_delta: opts.topDelta ?? -1,
       rating_bottom_count: opts.bottomCount ?? 3,

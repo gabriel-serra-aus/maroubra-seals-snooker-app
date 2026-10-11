@@ -15,6 +15,8 @@ export interface MatchActions {
   onSetLimit: (m: MatchView) => void;
   /** Note or move the table a match is on (spec 5.14). */
   onSetTable: (m: MatchView) => void;
+  /** Opens the player's edit card: name, rating and the rest (O-26). A new rating moves the start of their unfinished matches. */
+  onEditPlayer?: (e: EntryView) => void;
   /**
    * True while an action on this match, or one that touches the whole night, is in flight: this card's
    * buttons wait. Every other card stays live, so the organiser can move on to the next table (spec 3.4).
@@ -68,7 +70,7 @@ export function StateChip({ m, timedOut }: { m: MatchView; timedOut?: boolean })
   );
 }
 
-export function PlayerLine({ e, m, className }: { e: EntryView; m: MatchView; className?: string }) {
+export function PlayerLine({ e, m, className, onEdit }: { e: EntryView; m: MatchView; className?: string; onEdit?: (e: EntryView) => void }) {
   const start = m.start_entry_id === e.entry_id && m.start_points > 0;
   const isLoser = m.state === "finished" && m.loser_id === e.entry_id;
   const decision = isLoser && e.source !== "buyback" && m.round === 1 ? e.buyback_decision : null;
@@ -76,6 +78,19 @@ export function PlayerLine({ e, m, className }: { e: EntryView; m: MatchView; cl
     <div className={`player ${className ?? ""} ${m.winner_id === e.entry_id ? "winner" : ""} ${isLoser ? "loser" : ""}`}>
       <span>
         <Avatar id={e.player_id} name={e.name} photo={e.photo} /> <span className="name">{e.name}</span> <span className="muted">({fmtRating(e.entry_id === m.a.entry_id ? m.rating_a : m.rating_b)})</span> <SourceTag e={e} />
+        {onEdit && (
+          <button
+            type="button"
+            className="linkish small"
+            title={`Edit ${e.name}: name, rating, photo, contact`}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onEdit(e);
+            }}
+          >
+            Edit
+          </button>
+        )}
       </span>
       <span className="muted facts">
         {/* The handicap start sits on the weaker player's own line, so the number is read with the name (rules §6, spec 5.6). */}
@@ -154,8 +169,8 @@ export function MatchCard({ m, now, actions, expandable, large }: { m: MatchView
         </span>
       </div>
       {large && <Faces m={m} />}
-      <PlayerLine e={m.a} m={m} />
-      <PlayerLine e={m.b} m={m} />
+      <PlayerLine e={m.a} m={m} onEdit={actions?.onEditPlayer} />
+      <PlayerLine e={m.b} m={m} onEdit={actions?.onEditPlayer} />
       <StartNote m={m} />
       {(open || (actions && m.state === "in_play")) && m.started_at && (
         <div className="muted small">

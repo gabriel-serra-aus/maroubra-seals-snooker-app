@@ -110,7 +110,7 @@ async function CompHistory({ history, nightId }: { history: CompetitionHistory; 
           <p className="muted small">An abandoned night has no rating review.</p>
         ) : (
           <>
-            <p className="muted small">The rating changes saved against this night in its rating review (rules §13), in the order they were saved.</p>
+            <p className="muted small">The rating changes saved against this night — during it (O-26) and in its rating review (rules §13) — in the order they were saved.</p>
             <NightChanges changes={nightChanges} />
           </>
         )}
@@ -125,7 +125,14 @@ function HandicapHistory({ history }: { history: CompetitionHistory }) {
   const complete = nights.filter((n) => n.status === "complete");
   // Columns: complete nights oldest to newest, so the eye reads a row left to right as time passes.
   const columns = complete.slice().reverse();
-  const changeAt = new Map(changes.map((c) => [`${c.competition_id}:${c.player_id}`, c]));
+  // A night can hold two changes for a player: one made during it (O-26) and the review's. The cell shows
+  // the rating they came in on and the one they left with.
+  const changeAt = new Map<string, (typeof changes)[number]>();
+  for (const c of changes) {
+    const k = `${c.competition_id}:${c.player_id}`;
+    const prev = changeAt.get(k);
+    changeAt.set(k, prev ? { ...c, old_rating: prev.old_rating, changed_by: prev.changed_by === c.changed_by ? c.changed_by : `${prev.changed_by}, ${c.changed_by}` } : c);
+  }
   const playedAt = new Set(played.map((p) => `${p.competition_id}:${p.player_id}`));
   const completeIds = new Set(complete.map((n) => n.id));
   // Rows: everyone who took part in a complete night, by name, with their rating as it stands now.

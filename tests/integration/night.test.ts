@@ -51,10 +51,10 @@ describe("a 13-of-16 night, end to end", () => {
     expect((await api.publicPlayers()).body.players).toHaveLength(17);
   });
 
-  it("sets up the competition with the O-1 defaults and ticks 13 players", async () => {
+  it("sets up the competition with the O-24 defaults and ticks 13 players", async () => {
     const c = await api.createCompetition({ name: "Friday 11 Sep 2026", bracket_size: 16 });
     expect(c.status).toBe(201);
-    expect(c.body.competition).toMatchObject({ bracket_size: 16, rating_top_count: 3, rating_bottom_delta: 2 });
+    expect(c.body.competition).toMatchObject({ bracket_size: 16, rating_scheme: "finish", rating_final_delta: -3, rating_other_delta: 1 });
     comp = c.body.competition.id;
     expect(c.body.bracket.competition?.id).toBe(comp); // the setup screen shows the reply, no second request
     expect((await api.createCompetition()).status).toBe(409); // one live competition at a time
@@ -242,36 +242,44 @@ describe("a 13-of-16 night, end to end", () => {
     expect((await api.correct(r2.id, r2.a.entry_id)).status).toBe(409);
   });
 
-  it("rating review proposes the O-1 scale, saves once, and is idempotent (spec 5.9)", async () => {
+  it("rating review proposes the O-24 scale and saves once (spec 3.7, 5.9, O-27)", async () => {
     const rv = await api.ratingReview(comp);
     expect(rv.status).toBe(200);
     const rows = rv.body.rows;
-    expect(rows[0].finish).toBe("won");
-    expect(rows.filter((r) => r.group === "top").map((r) => r.delta)).toEqual([-1, -1, -1]);
-    expect(rows.filter((r) => r.group === "bottom").map((r) => r.delta)).toEqual([2, 2, 2]);
-    const winner = rows[0];
+    // Both finalists first, the final having been played makes no difference (O-24).
+    expect(rows.slice(0, 2).map((r) => r.group)).toEqual(["final", "final"]);
+    expect(rows.slice(0, 2).some((r) => r.finish === "won")).toBe(true);
+    expect(rows.filter((r) => r.group === "semi")).toHaveLength(2);
+    const step = { final: -3, semi: -2, buyback_lost: 2, other: 1 } as Record<string, number>;
+    expect(rows.every((r) => r.delta === step[r.group] && r.story.length > 0)).toBe(true);
+    const winner = rows.find((r) => r.finish === "won")!;
     const save = await api.saveRatingReview(comp, rows.map((r) => ({ player_id: r.player_id, new_rating: r.proposed_rating })));
-    expect(save.body.written).toBe(6);
+    expect(save.body.written).toBe(13);
     const again = await api.ratingReview(comp);
+    expect(again.body.competition).toMatchObject({ rating_review_saved_by: "Gabriel" });
     const w2 = again.body.rows.find((r) => r.player_id === winner.player_id)!;
     expect(w2.current_rating).toBe(winner.proposed_rating);
-    // Saving the same numbers again writes nothing.
-    const save2 = await api.saveRatingReview(comp, again.body.rows.map((r) => ({ player_id: r.player_id, new_rating: r.current_rating })));
-    expect(save2.body.written).toBe(0);
+    // The page shows what was saved, not a fresh proposal on top of it.
+    expect(w2.saved_change).toEqual({ from: winner.current_rating, to: winner.proposed_rating });
+    // A second save is refused and writes nothing (O-27): handicaps change on Players from here.
+    const save2 = await api.saveRatingReview(comp, again.body.rows.map((r) => ({ player_id: r.player_id, new_rating: r.proposed_rating })));
+    expect(save2.status).toBe(409);
+    expect(save2.body).toMatchObject({ code: "review_saved" });
+    expect((await api.ratingReview(comp)).body.rows.find((r) => r.player_id === winner.player_id)!.current_rating).toBe(winner.proposed_rating);
     const h = await api.ratingHistory(winner.player_id);
     expect(h.body.history[0]).toMatchObject({ old_rating: winner.current_rating, new_rating: winner.proposed_rating, changed_by: "Gabriel" });
     // A completed night carries its settings into the next one.
-    const next = await api.createCompetition({ rating_top_count: 4 });
-    expect(next.body.competition.rating_top_count).toBe(4);
+    const next = await api.createCompetition({ rating_final_delta: -4 });
+    expect(next.body.competition.rating_final_delta).toBe(-4);
     await api.abandon(next.body.competition.id);
     const after = await api.createCompetition();
-    expect(after.body.competition.rating_top_count).toBe(4);
+    expect(after.body.competition.rating_final_delta).toBe(-4);
     await api.abandon(after.body.competition.id);
     // The public page still shows the completed night, not the abandoned ones.
     expect((await api.publicBracket()).body.competition?.id).toBe(comp);
   });
 
-  it("history lists the night with its winner, who played, and the six rating changes (spec 3.11)", async () => {
+  it("history lists the night with its winner, who played, and the thirteen rating changes (spec 3.11)", async () => {
     const h = await competitionHistory(await getDb());
     // Two abandoned nights sit above the completed one, newest first; the live night is not history.
     expect(h.nights.map((n) => n.status)).toEqual(["abandoned", "abandoned", "complete"]);
@@ -280,12 +288,15 @@ describe("a 13-of-16 night, end to end", () => {
     expect(night.players).toBe(13);
     expect(night.bracket_size).toBe(16);
     const rv = await api.ratingReview(comp);
-    expect(night.winner_name).toBe(rv.body.rows[0].name);
+    expect(night.winner_name).toBe(rv.body.rows.find((r) => r.finish === "won")!.name);
     expect(night.runner_up_name).toBe(rv.body.rows.find((r) => r.finish === "final")!.name);
     const mine = h.changes.filter((c) => c.competition_id === comp);
-    expect(mine).toHaveLength(6);
+    expect(mine).toHaveLength(13);
     expect(mine.every((c) => c.changed_by === "Gabriel" && c.old_rating !== null && c.new_rating !== c.old_rating)).toBe(true);
-    expect(mine.map((c) => c.new_rating - (c.old_rating ?? 0)).sort()).toEqual([-1, -1, -1, 2, 2, 2]);
+    const deltas = mine.map((c) => c.new_rating - (c.old_rating ?? 0));
+    expect(deltas.filter((d) => d === -3)).toHaveLength(2);
+    expect(deltas.filter((d) => d === -2)).toHaveLength(2);
+    expect(deltas.every((d) => [-3, -2, 1, 2].includes(d))).toBe(true);
     expect(h.played.filter((p) => p.competition_id === comp)).toHaveLength(13);
     expect(h.played.some((p) => p.competition_id !== comp)).toBe(false);
   });

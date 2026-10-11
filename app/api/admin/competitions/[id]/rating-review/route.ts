@@ -1,12 +1,12 @@
-// GET/POST /api/admin/competitions/{id}/rating-review (rules 13, O-1, spec 5.9, 7.3).
+// GET/POST /api/admin/competitions/{id}/rating-review (rules 13, O-24, spec 5.9, 7.3).
 import { getDb } from "@/lib/db/client";
 import { insertRatingChange } from "@/lib/db/players";
+import { loadReview } from "@/lib/db/review";
 import { getCompetition, loadSnapshot } from "@/lib/db/snapshot";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { handle, json, readJson } from "@/lib/api/respond";
 import { requiredRating, requiredUuid } from "@/lib/api/validate";
-import { badRequest, conflict, notFound } from "@/lib/logic/errors";
-import { ratingReview } from "@/lib/logic/ratings";
+import { AppError, badRequest, conflict, notFound } from "@/lib/logic/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +17,7 @@ export const GET = handle(async (request, { params }) => {
   const c = await getCompetition(db, id);
   if (!c) throw notFound("Competition not found");
   if (c.status !== "complete") throw conflict("The rating review opens once the competition is complete");
-  const s = await loadSnapshot(db, c);
-  return json({
-    competition: { id: c.id, name: c.name, completed_at: c.completed_at, rating_top_count: c.rating_top_count, rating_top_delta: c.rating_top_delta, rating_bottom_count: c.rating_bottom_count, rating_bottom_delta: c.rating_bottom_delta },
-    rows: ratingReview(s),
-  });
+  return json(await loadReview(db, c));
 });
 
 export const POST = handle(async (request, { params }) => {
@@ -39,6 +35,15 @@ export const POST = handle(async (request, { params }) => {
     const c = await getCompetition(tx, id);
     if (!c) throw notFound("Competition not found");
     if (c.status !== "complete") throw conflict("The rating review opens once the competition is complete");
+    // Saved once (O-27): this claims the review, so a second save — another tab, a double tap — is refused.
+    const claimed = await tx.query(
+      "update competitions set rating_review_saved_at = now(), rating_review_saved_by = $2 where id = $1 and rating_review_saved_at is null returning id",
+      [c.id, session.name],
+    );
+    if (!claimed.length) {
+      const by = c.rating_review_saved_by ? ` by ${c.rating_review_saved_by}` : "";
+      throw new AppError(409, `The rating review for ${c.name} was already saved${by}. Change a handicap on the Players screen now.`, { code: "review_saved" });
+    }
     const s = await loadSnapshot(tx, c);
     let n = 0;
     for (const ch of changes) {

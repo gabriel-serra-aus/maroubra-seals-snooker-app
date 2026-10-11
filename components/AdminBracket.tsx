@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { bracketIsStale, type BracketPayload, type MatchView } from "@/lib/bracket/payload";
+import { bracketIsStale, type BracketPayload, type EntryView, type MatchView } from "@/lib/bracket/payload";
 import { numberLabel } from "@/lib/logic/derive";
 import { BracketTree } from "./BracketTree";
 import { BracketView } from "./BracketView";
@@ -11,6 +11,7 @@ import { Btn, Spinner } from "./Btn";
 import { CompleteDialog, type CompleteReply, type CompleteRequest } from "./CompleteDialog";
 import { useDialog } from "./Dialog";
 import { MatchCard, actionKey, matchOfKey, type MatchActions } from "./MatchCard";
+import { EditSheet, type ClubPlayer as FullPlayer } from "./PlayersAdmin";
 import { TablePicker, TableStrip, tableStates, type TableClaims } from "./Tables";
 import { PlayerFinder } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
@@ -22,9 +23,10 @@ import { playAlarm, unlockSound, useSound, useTimeoutAlert } from "./client/soun
 type Dialog = { kind: "complete" | "correct"; m: MatchView } | { kind: "match" | "table" | "move"; id: string } | { kind: "add" } | null;
 type ClubPlayer = { id: string; name: string; rating: number; active: boolean };
 type WithBracket = { bracket: BracketPayload };
+type PlayerReply = { notes: string[]; player: FullPlayer } & WithBracket;
 
 /** Admin bracket and match control (spec 3.4). */
-export function AdminBracket({ initial }: { initial: BracketPayload }) {
+export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload; signedInAs: string }) {
   const router = useRouter();
   const { data: b, setData, refresh } = usePoll<BracketPayload>("/api/admin/bracket", 5_000, initial, bracketIsStale);
   useBracketScreen(b, setData);
@@ -34,6 +36,8 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
   useTimeoutAlert(allMatches, now, soundOn);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The player whose edit card is open, opened from a match card (O-26).
+  const [editing, setEditing] = useState<FullPlayer | null>(null);
   const [query, setQuery] = useState("");
   // Tree by default on a desktop, list on a phone (spec 3.4, 3.8); a tap on the switch is remembered.
   const wide = useWideScreen();
@@ -159,6 +163,12 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
     // Moving (or noting) a table shows the same table cards as Start (spec 5.14).
     onSetTable: (m) => setDialog({ kind: "move", id: m.id }),
     onComplete: (m) => setDialog({ kind: "complete", m }),
+    // Load the player's full record, then open the same edit card as the club list (spec 3.2, O-26).
+    onEditPlayer: (e: EntryView) =>
+      void run(async () => {
+        setDialog(null);
+        setEditing((await get<{ player: FullPlayer }>(`/api/admin/players/${e.player_id}`)).player);
+      }, `player:${e.player_id}`),
     onCorrect: (m) => setDialog({ kind: "correct", m }),
     onCancelStart: (m) => {
       void (async () => {
@@ -424,6 +434,25 @@ export function AdminBracket({ initial }: { initial: BracketPayload }) {
       {starting && <TablePicker b={b} m={starting} now={now} claims={claims} mode="start" onPick={(t) => startOn(starting, t)} onClose={() => setDialog(null)} />}
       {moving && <TablePicker b={b} m={moving} now={now} claims={claims} mode="move" onPick={(t) => moveTo(moving, t)} onClear={() => moveTo(moving, null)} onClose={() => setDialog(null)} />}
       {dialog?.kind === "add" && <AddLateArrivalSheet b={b} onClose={() => setDialog(null)} onSaved={done} />}
+      {editing && (
+        <EditSheet<PlayerReply>
+          p={editing}
+          signedInAs={signedInAs}
+          competitionId={compId}
+          onClose={() => setEditing(null)}
+          onSaved={(r) => {
+            setEditing(null);
+            setData(r.bracket);
+            setNotice(r.notes.length ? `${r.player.name} saved. ${r.notes.join(" · ")}` : `${r.player.name} saved.`);
+          }}
+          onStale={(msg) => {
+            setEditing(null);
+            setNotice(msg);
+            void refresh();
+          }}
+          onPhoto={(p) => setEditing(p)}
+        />
+      )}
       {confirmCard}
       {void refresh}
     </main>

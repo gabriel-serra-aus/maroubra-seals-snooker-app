@@ -2,7 +2,7 @@
 // persist the diff plus audit rows, return the fresh bracket. Dry runs skip the persisting.
 
 import { randomUUID } from "node:crypto";
-import { getDb } from "@/lib/db/client";
+import { getDb, type Queryable } from "@/lib/db/client";
 import { applySnapshotDiff } from "@/lib/db/apply";
 import { insertAdminActions } from "@/lib/db/adminActions";
 import { findLiveCompetition, loadSnapshot, lockCompetition, lockCompetitionOfMatch } from "@/lib/db/snapshot";
@@ -21,6 +21,8 @@ export interface MutateOptions {
   /** Players to load into the snapshot beyond those already entered (for adding someone). */
   extraPlayerIds?: string[];
   dryRun?: boolean;
+  /** Writes outside the snapshot, made under the competition lock before it is loaded (a player edit, O-26). */
+  before?: (tx: Queryable) => Promise<void>;
 }
 
 export interface MutateResult<T> {
@@ -53,6 +55,7 @@ export async function mutateCompetition<T>(
       competition = await lockCompetition(tx, live.id);
       if (!competition) throw notFound("Competition not found");
     }
+    if (opts.before) await opts.before(tx);
     const before = await loadSnapshot(tx, competition, opts.extraPlayerIds ?? []);
     refuseStale(session, before, new Date());
     const after = cloneSnapshot(before);

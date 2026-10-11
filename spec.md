@@ -152,7 +152,7 @@ Shows every active player's name and rating, inactive players behind a toggle, a
 | Action | What happens |
 | --- | --- |
 | Add player | Name and starting rating, and optionally a mobile number and email address (O-23). The first rating is recorded as a rating change so its origin is in the history. |
-| Edit → Save | Renames the player, overrides the rating and/or changes the contact details. A new name must still be unique, ignoring case; a rename keeps every result and the rating history, and writes an `admin_actions` row naming the organiser (O-8). A rating change writes a history row recording old value, new value, the signed-in organiser and the time (O-8). **Changing a rating never changes the start of a match already created tonight** (5.6). |
+| Edit → Save | Renames the player, overrides the rating and/or changes the contact details. A new name must still be unique, ignoring case; a rename keeps every result and the rating history, and writes an `admin_actions` row naming the organiser (O-8). A rating change writes a history row recording old value, new value, the signed-in organiser and the time (O-8). **While a night is in progress, a player entered in it cannot have their rating changed here** (O-26): the list tags them "playing tonight", the Rating box is disabled with "Playing tonight — change the handicap from the competition tree", and the server refuses it. Their name, photo, contact details and status still change here. The lock lifts the moment the night is complete or abandoned. |
 | Active / Inactive | Deactivating hides the player from the entry list and the public list, and blocks them from being entered. Neither direction touches their history. A player in tonight's competition cannot be deactivated until the night is complete or abandoned. |
 | Photo (O-18) | On the edit sheet: **Take photo** opens the app's own camera card — a live picture from the phone's back camera or a computer's webcam, **Switch camera** for the other one, **Snap**, then **Use photo** or **Retake**; without a camera, or with permission refused, the card says so and offers the file picker. **Choose photo** picks a file or the phone's gallery. Either way the browser crops the centre square, shrinks it to 320 pixels and uploads it at once (no Save needed); a new one replaces the old, and **Remove photo** takes it away. Every list on the organiser's screens shows the photo small beside the name, or the player's initials on a colour of their own when there is none. The public site never shows photos (O-21). |
 
@@ -248,6 +248,7 @@ Rounds overlap: R2M1 can be in play while R1M7 has not started, so the list show
 | Table 2 ▾ | Match not started or in play | Notes the table a match will go on (it stands in for the Start question while free), or moves a match in play to a free table. Blank clears it (5.14). |
 | limit: 25 min ▾ | Match not started | Overrides the time limit for this match only. Rarely needed, so it hides behind the card's note rather than taking a button. |
 | **Complete** | Match in play | Opens 3.5. A result cannot be entered on a match that has not started (§12). |
+| **Edit** (beside each player on a card) | Night in progress, any match state | Opens the 3.2 edit sheet for that player — photo, name, rating, reason, contact details, status (O-26). Every card has it, so it is reached from the list and from a tree box's card alike. A rating saved here is **permanent**, like 3.2: a history row naming the organiser, recorded against tonight's night. It recalculates the start of every one of their matches **not started or in play** (5.6); a finished match keeps the ratings it was played on. The clock is left alone. The reply carries the bracket and a note for each start that moved: "R1M2: Alice Chen now starts on 12 (was 17 for Alice Chen)". |
 | **⤺ Cancel start** | Match in play | Confirms, then returns the match to `not_started`, clears `started_at`, the frozen limit and the table, writes an audit row. For the wrong match having been started (O-5). Players, ratings and start untouched. |
 | **Review result** | Match finished, winner's next match not started | Opens 3.5 to change the result; the corrected winner is pulled back out of the next round (§12). Otherwise replaced by "Result locked: next match started" — the override (3.9) is the way through. |
 | **Force Pair** | Buy-backs open, ≥2 waiting in round one | Pairs two waiting players at random, whichever way they entered (§10). Under two waiting it is disabled with "Needs 2 waiting players". Never touches an existing match. Hidden once buy-backs close. |
@@ -291,16 +292,18 @@ The dialog asks for the winner, and for a round-one match where the loser has no
 
 ### 3.7 End-of-night rating review
 
-Implements §13 with the scale from O-1. The app **proposes** every new rating from the four settings on the competition and the organiser can change any before saving (§13: "The organiser has final say").
+Implements §13 with the scale from O-24. The app **proposes** every new rating from the four settings on the competition and the organiser can change any before saving (§13: "The organiser has final say").
 
-Shows every player who took part, in finishing order (5.9), with the proposed rating pre-filled in an editable box and the adjustment that produced it. The scale in use is shown at the top; players outside both groups are listed as unchanged.
+Shows every player who took part, **grouped by how their night ended** (5.9), in this order, each group headed with its change: **Reached the final** (−3), **Semi-final** (−2), **Bought back, lost again** (+2), **Everyone else** (+1). Within a group, the furthest round first, then by name. Each row has the player's name, a **bought back** tag when they did, one line of what happened — "Lost R2M3 to Dee Park", "Lost R1M2 to Eve Long → bought back → Lost R1M7 to Gus Ray", "Reached the Final v Bob Smith", "In R3M1 v Hal Ito when the night ended" — and, when their rating was changed during the night (O-26), "Rated 30 → 28 during the night". The proposal is pre-filled in an editable box with the change beside it. The scale in use is shown at the top.
 
-**Finishing order** is how far the player got: the winner first, then the runner-up, the beaten semi-finalists, and so on down to players knocked out in round one who did not win a buy-back match (5.9). A player who bought back is ranked on the better of their two runs.
+**The proposal adds to any change made during the night** (O-26): it starts from the player's current rating, so a player re-rated from 30 to 28 mid-night who reaches the final is proposed 25. Both changes are in their history.
+
+A night reviewed under O-1 (`rating_scheme = 'groups'`, every night before O-24) keeps its old screen: top finishers, bottom finishers, everyone else unchanged, in the finishing order of 5.9.
 
 | Action | What happens |
 | --- | --- |
 | Edit a box | Overrides the proposal for that player. |
-| Save rating changes | Writes a rating change per player whose value differs from their current rating, with the signed-in organiser and the time (§13, O-8). Unchanged rows are not written. The review can be reopened and saved again; it always compares against the current rating, so saving twice does not apply the adjustment twice. On success the organiser is taken to **that night in the history** (`/admin/history?night=<id>`), where the changes just saved are listed under Handicap results — the last step of the night. |
+| Save rating changes | Writes a rating change per player whose value differs from their current rating, with the signed-in organiser and the time (§13, O-8). Unchanged rows are not written. **The review is saved once** (O-27): saving records who saved it and when, and a second save — another tab, a double tap — is refused. Reopened afterwards, the page shows what was saved, read-only ("45 → 43", or "unchanged"), with "Saved by Gabriel on 11 Oct 2026" and a link to Players: from then on a handicap changes only by hand there (3.2). On success the organiser is taken to **that night in the history** (`/admin/history?night=<id>`), where the changes just saved are listed under Handicap results — the last step of the night. |
 
 ### 3.8 Public bracket
 
@@ -325,7 +328,7 @@ With no competition the Tonight tab says nothing is running and that the draw ap
 
 The escape hatch (O-5). Everything the normal screens refuse is possible here, on the organiser's word. It exists because a club night goes wrong in ways no specification predicts: the wrong name was ticked, two players swapped tables, someone went home, a result was entered against the wrong match an hour ago.
 
-Shows every player in tonight's competition with their position, every match with its state, every free pass, the night-level switches, and the audit log of overrides already made tonight. The matches show as the fixed tree or as a list, with the same List | Tree switch as 3.4; a match box in the tree opens that match's override card. In the tree each round-one box not yet under way is drawn seat by seat, so a player who has not played can be moved to an open seat (O-17). Each action shows a plain-English confirmation naming every consequence before it runs, and writes an `admin_actions` row with the signed-in organiser's name (O-8).
+Shows every player in tonight's competition with their position, every match with its state, every free pass, the night-level switches, and the audit log of overrides already made tonight. The matches show **only as the fixed tree** (O-25): the screen has no List view and no List | Tree switch (3.4 and the public page keep theirs). A match box opens that match's override card — reset, delete (round one), replace a player, and **remove** either player from the night. The sections under the tree add a player, pair two waiting players, grant and revoke free passes, and hold the night-level switches. In the tree each round-one box not yet under way is drawn seat by seat, so a player who has not played can be moved to an open seat (O-17). Each action shows a plain-English confirmation naming every consequence before it runs, and writes an `admin_actions` row with the signed-in organiser's name (O-8).
 
 | Action | What happens |
 | --- | --- |
@@ -345,7 +348,7 @@ The override refuses only one thing: it will not leave the competition in a stat
 
 ### 3.10 Settings
 
-The things that rarely change, kept off the setup screen so the night's setup is size and players only: the live competition's **match time limit** (§12), the number of **snooker tables** the club plays on tonight (5.14; **four** unless changed, carried over from the previous night), and the four **rating adjustment** numbers (top X by Y, bottom Z by W — O-1).
+The things that rarely change, kept off the setup screen so the night's setup is size and players only: the live competition's **match time limit** (§12), the number of **snooker tables** the club plays on tonight (5.14; **four** unless changed, carried over from the previous night), and the four **rating changes** by how the night ended (reached the final **−3**, lost the semi-final **−2**, bought back and lost again **+2**, everyone else **+1** — O-24). A night begun under O-1 shows its scale locked.
 
 With no competition set up it says so and links to 3.3: a new night starts with the previous night's values (7.4), so there is nothing to edit until one exists.
 
@@ -587,7 +590,7 @@ Negative ratings are ordinary. The difference is an absolute value, so `20 v −
 
 Two thirds of a whole number is never exactly `.5`, so "round to the nearest point" needs no tie-break. Ratings are whole numbers — positive, zero or negative.
 
-The start is calculated **when the match is created** (§13) and the ratings are snapshotted on the match row (`rating_a`, `rating_b`, `start_points`, `start_entry_id`). A rating override later in the night (3.2) does not change a match already drawn; this keeps the bracket honest. The one thing that does recalculate a start is a player being swapped into a match on the override (3.9), because it is a different match afterwards.
+The start is calculated **when the match is created** (§13) and the ratings are snapshotted on the match row (`rating_a`, `rating_b`, `start_points`, `start_entry_id`). **A rating changed during the night** (3.4 Edit, O-26) recalculates both snapshots and the start of every match of that player's that is `not_started` or `in_play`; a `finished` match keeps what it was played on. The club list cannot change the rating of a player in a night in progress (3.2), so there is one way in and the bracket always follows it. The only other thing that recalculates a start is a player being swapped into a match on the override (3.9), because it is a different match afterwards.
 
 ### 5.7 Result correction (§12, O-6)
 
@@ -613,13 +616,34 @@ Effect: clear `started_at` and the frozen `time_limit_minutes`, set `state = not
 
 There is deliberately no "pause" (§12 has no such concept). Cancelling and restarting gives the match a full clock again, which is the honest thing when the wrong match was started.
 
-### 5.9 Rating adjustment after the night (§13, O-1)
+### 5.9 Rating adjustment after the night (§13, O-24)
 
-Four settings snapshotted on the competition: `rating_top_count` (default 3), `rating_top_delta` (default **−1**), `rating_bottom_count` (default 3), `rating_bottom_delta` (default **+2**).
+Four settings snapshotted on the competition (O-24): `rating_final_delta` (default **−3**), `rating_semi_delta` (default **−2**), `rating_buyback_lost_delta` (default **+2**), `rating_other_delta` (default **+1**). Lower is better, so minus is a good night.
+
+**Reached.** For every player who took part, `reached_round` is the highest round in which they had a match, held a free pass, or **won their way into** (a winner waiting alone in the next round has reached it). A player with two entries (first draw plus buy-back) takes the higher. With `F = log2(bracket_size)` the final's round (4 for 16, 5 for 32):
+
+| Group | Who | Change |
+| --- | --- | --- |
+| `final` | `reached_round = F` — **both** finalists | `rating_final_delta` |
+| `semi` | `reached_round = F − 1` | `rating_semi_delta` |
+| `buyback_lost` | otherwise: lost in round one, bought back, and **lost again in round one** | `rating_buyback_lost_delta` |
+| `other` | everyone else | `rating_other_delta` |
+
+**The final is usually not played, and when it is it changes nothing**: winner and runner-up get the same. A free pass into a round counts as reaching it. A buy-back who wins their round-one match and loses later, or who goes up on a free pass and loses in round two, is `other`: "lost again" is a round-one loss only.
+
+**A night ended early** (O-16) uses the same rule on the round reached: players sitting in the semi-final round when the night ended get the semi change whether or not they played, two left in an unplayed final get the final change, and a night ended in round two may have nobody in either. The organiser edits any number on 3.7.
+
+The proposal is `clamp(current rating + change)` to `−100..200` (6.3). The current rating already includes any change made during the night (O-26), so the two add up.
+
+Each row also carries `story`, the night in words for 3.7, and `tonight_change`, the first old and last new value of the `rating_changes` rows written against this night before `completed_at`.
+
+#### Nights reviewed under O-1 (`rating_scheme = 'groups'`)
+
+Every night that existed before migration 0010 (other than one still in setup) keeps the O-1 scheme so its review reads as it was saved: four settings `rating_top_count` (default 3), `rating_top_delta` (default **−1**), `rating_bottom_count` (default 3), `rating_bottom_delta` (default **+2**).
 
 **Finishing order.** For every player who took part:
 
-- `reached_round` — the highest round in which they had a match or held a free pass. A player with two entries (first draw plus buy-back) takes the higher.
+- `reached_round` — as above. A player with two entries (first draw plus buy-back) takes the higher.
 - `won_final` — true only for the winner of the night. A night ended early (O-16) has no winner, and its labels are the plain round reached: nothing is called "final" when no final was played.
 
 Best-first order is `(reached_round desc, won_final desc, rating asc, name asc)` — `rating asc` because the lower handicap is the better player (5.6). Worst-first is the same keys reversed, with `rating desc`, so among players knocked out at the same point the weakest is first. The last two keys exist only to make the cut deterministic; they carry no meaning, and the organiser can move any number by hand on 3.7.
@@ -635,7 +659,7 @@ With the defaults on a full 16-player night: the winner, the runner-up and the b
 
 **The direction is the right way round.** A good night lowers your handicap, which makes you the stronger-rated player, which means you *give away* more start next week (5.6). A bad night raises it and you receive more. The bottom delta being larger (+2 against −1) pulls the field together faster at the weak end than it stretches it at the strong end — the organiser's call, and a setting either way.
 
-The review is idempotent: 3.7 always proposes `current rating + delta`, so saving twice with no edits writes nothing the second time.
+The review is saved once (O-27): the save claims `rating_review_saved_at` on the competition in the same transaction, so it can never be applied twice. Before it is saved, 3.7 proposes `current rating + change`; after, it shows the `rating_changes` written against the night once complete.
 
 ### 5.10 Master override (O-5)
 
@@ -707,7 +731,9 @@ The minimum unit tests over `lib/`:
 - Handicap start: the §6 example (45 v 20 → 17) and the whole 5.6 table, including that the start goes to the **higher** number, and the three negative-rating rows.
 - Correction pulling a winner out of a not-started next-round match (the other player waits in the box until the new winner arrives) and out of a free pass; rejection when the loser's buy-back match has started (5.7, O-6).
 - Cancel start clears the clock, leaves the pairing intact, and the match can be started again (5.8).
-- Rating adjustment: finishing order for a 16-player night with buy-backs, the default groups, no player in both, a winner whose handicap crosses zero into negative, clamping at −100 and 200, and idempotence on a second save (5.9).
+- Rating adjustment (O-24): on a 14-of-16 night with two buy-backs meeting in M8, both finalists −3 (the final played or not), the beaten semi-finalists −2, the M8 loser +2 with the story "Lost … → bought back → Lost R1M8 to …", the M8 winner not "lost again", nor a buy-back who goes up on a free pass and loses in round two, everyone else +1, shown in group order; a night ended in round two gives −2 to the winners waiting in round three and +1 to a match cut off in play; an unplayed final gives both −3; clamping at −100 and 200. The O-1 scheme keeps its tests: finishing order, the default groups, no player in both, a winner crossing zero (5.9).
+- A rating changed during the night (O-26): the start of a not-started and an in-play match follows it, with a note naming the new start, while a finished match keeps its ratings and the clock is untouched; the club list refuses the change for a player in a night in progress (`playing_tonight`) but allows it before Start and after the night ends; the bracket route refuses a player not in the night, a stale card, and a night no longer in progress; the review starts from the edited rating and shows `tonight_change` (5.6, 5.9, 7.3).
+- The review saves once (O-27): the second save is refused with `review_saved` and writes nothing, and the reopened review shows `saved_change` rather than a fresh proposal (3.7).
 - Overrides: delete refused from round two, pair needs the same box, add takes an open place and climbs, grow renumbers M9 → M17, reopen takes the close's passes back and refuses once a match reached through one has started; move goes only to an open place and refuses a player who has played, a started match and a later round (5.10, O-17).
 - No automatic close: the window outlives the last round-one result and a late arrival still gets in until the tap (5.3, O-15); abandon freeing the live slot (5.11).
 - End night here (O-16, 5.11): the night becomes complete with a null winner and every finished match kept, a match in play has its clock thrown away, the players left standing are named, a second tap is refused, the `dry_run` writes nothing, and the rating review still opens — labelling the furthest round reached `R2`, not "final".
@@ -783,7 +809,7 @@ There is no delete route and no `on delete cascade` pointing at this table: hist
 | --- | --- | --- |
 | id | bigint | PK, identity |
 | player_id | uuid | FK → players, not null |
-| competition_id | uuid | FK → competitions, nullable (null for ad-hoc overrides) |
+| competition_id | uuid | FK → competitions, nullable — the night for its review and for a change made from its bracket (O-26); null for a club-list edit |
 | old_rating | integer | nullable (null for the first rating) |
 | new_rating | integer | not null |
 | changed_by | text | not null — the signed-in organiser's name from the session cookie, never typed (O-8) |
@@ -800,10 +826,17 @@ There is no delete route and no `on delete cascade` pointing at this table: hist
 | bracket_size | smallint | not null, `check (bracket_size in (16, 32))` |
 | default_time_limit_minutes | smallint | not null, default 25, `check (between 1 and 180)` |
 | table_count | smallint | not null, default 4, `check (between 1 and 16)` — the club's snooker tables tonight (5.14) |
-| rating_top_count | smallint | not null, default 3, `check (>= 0)` (O-1) |
-| rating_top_delta | smallint | not null, default **−1** (O-1) |
-| rating_bottom_count | smallint | not null, default 3, `check (>= 0)` (O-1) |
-| rating_bottom_delta | smallint | not null, default **+2** (O-1) |
+| rating_scheme | text | not null, default `'finish'`, `check (in ('groups', 'finish'))` — `groups` on nights begun under O-1 (5.9, O-24) |
+| rating_final_delta | smallint | not null, default **−3** (O-24) |
+| rating_semi_delta | smallint | not null, default **−2** (O-24) |
+| rating_buyback_lost_delta | smallint | not null, default **+2** (O-24) |
+| rating_other_delta | smallint | not null, default **+1** (O-24) |
+| rating_review_saved_at | timestamptz | nullable — set by the one save of the night's review (3.7, O-27) |
+| rating_review_saved_by | text | nullable — the organiser who saved it (O-8) |
+| rating_top_count | smallint | not null, default 3, `check (>= 0)` (O-1) — read only on a `groups` night |
+| rating_top_delta | smallint | not null, default **−1** (O-1) — as above |
+| rating_bottom_count | smallint | not null, default 3, `check (>= 0)` (O-1) — as above |
+| rating_bottom_delta | smallint | not null, default **+2** (O-1) — as above |
 | started_at | timestamptz | nullable; set by Start Competition, after which `bracket_size` may only be raised 16 → 32 by the override |
 | buybacks_closed_at | timestamptz | nullable |
 | completed_at | timestamptz | nullable |
@@ -816,7 +849,7 @@ There is no delete route and no `on delete cascade` pointing at this table: hist
 
 At most one competition may be `setup` or `in_progress` at a time: partial unique index on a constant, `((1)) where status in ('setup','in_progress')`. Abandoning (5.11) frees it immediately.
 
-The four rating columns are snapshotted from the previous competition when a new one is created, so last week's review is never rewritten by this week's settings (O-1).
+The four O-24 rating columns are snapshotted from the previous competition when a new one is created, so last week's review is never rewritten by this week's settings (O-24).
 
 **entries** — one player in one slot of one competition.
 
@@ -947,13 +980,15 @@ The `s-maxage=5` cache is a **cost control**, not a nicety — see CLAUDE.md. Th
 | --- | --- | --- |
 | `GET /api/admin/players` | `?include_inactive=1` | — |
 | `POST /api/admin/players` | `{ name, rating, phone?, email? }` | Name 1–60 chars, unique; rating integer −100–200 (negatives allowed); phone and email as 3.2 (`400` otherwise). Writes the player and an initial rating change attributed to the session (O-8). |
-| `PATCH /api/admin/players/{id}` | any of `{ expected_updated_at, name, rating, reason, active, phone, email }` | Phone and email as 3.2; `""` clears one. Name 1–60 chars, unique ignoring case (`409` naming the clash); a rename writes an `admin_actions` row (action `rename_player`, no competition). `expected_updated_at` (the edit sheet sends the player's `updated_at` from when it opened) that no longer matches is refused with `409` `{ code: "stale" }` (7.8). Rating integer −100–200; a change writes a `rating_changes` row. `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
+| `PATCH /api/admin/players/{id}` | any of `{ expected_updated_at, name, rating, reason, active, phone, email }` | Phone and email as 3.2; `""` clears one. Name 1–60 chars, unique ignoring case (`409` naming the clash); a rename writes an `admin_actions` row (action `rename_player`, no competition). `expected_updated_at` (the edit sheet sends the player's `updated_at` from when it opened) that no longer matches is refused with `409` `{ code: "stale" }` (7.8). Rating integer −100–200; a change writes a `rating_changes` row, and is refused with `409` `{ code: "playing_tonight" }` for a player entered in an `in_progress` competition (O-26). `active: false` is refused with `409` while the player is in a `setup` or `in_progress` competition (O-9). There is **no** `DELETE`. |
+| `GET /api/admin/players/{id}` | — | The player, with `photo` and `updated_at`: the edit sheet opened from the bracket (O-26). |
+| `PATCH /api/admin/competitions/{id}/players/{playerId}` | as `PATCH /api/admin/players/{id}` | Edit from tonight's bracket (3.4, O-26). Competition `in_progress` (`409` otherwise) and the player entered in it (`400`); bracket version (7.8) and `expected_updated_at` checked. The player is updated as above, the rating allowed and its `rating_changes` row carrying this `competition_id`; then every not-finished match of theirs takes the new rating and start (5.6), in the same transaction. Returns `{ player, notes, bracket }`. |
 | `GET /api/admin/players/{id}/rating-history` | — | — |
 | `GET /api/admin/players/{id}/photo?v=…` | — | The photo bytes with their type; `404` without one. `Cache-Control: private, max-age=31536000, immutable` (6.6). |
 | `PUT /api/admin/players/{id}/photo` | The image bytes; `Content-Type` `image/jpeg`, `image/png` or `image/webp` | At most 300 KB, and the bytes must carry that type's signature (`400` otherwise). Replaces any photo and sets `photo_at` (6.6, O-18). Returns the player with `photo`. |
 | `DELETE /api/admin/players/{id}/photo` | — | Removes the photo (the player stays — there is still no player `DELETE`, O-9). |
-| `GET /api/admin/competitions/{id}/rating-review` | — | Competition must be `complete`. Returns every player in finishing order with `reached_round`, current rating and the proposal from 5.9. |
-| `POST /api/admin/competitions/{id}/rating-review` | `{ changes: [{ player_id, new_rating }] }` | Competition `complete`; each player must have an entry; each rating −100–200. One rating change per row that differs from the current rating. |
+| `GET /api/admin/competitions/{id}/rating-review` | — | Competition must be `complete`. Returns the competition's scale and every player with `reached_round`, `group`, `story`, `bought_back`, `tonight_change`, current rating and the proposal from 5.9, in the 3.7 order; once saved, `saved_change` per player and the competition's `rating_review_saved_at` / `_by`. |
+| `POST /api/admin/competitions/{id}/rating-review` | `{ changes: [{ player_id, new_rating }] }` | Competition `complete` and its review not yet saved (`409` `{ code: "review_saved" }` otherwise, O-27); each player must have an entry; each rating −100–200. One rating change per row that differs from the current rating; sets `rating_review_saved_at` and `_by`. |
 
 All require the cookie.
 
@@ -1036,7 +1071,7 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 
 | # | Question | Ruling | Where |
 | --- | --- | --- | --- |
-| O-1 | Handicap adjustment amounts | **Configurable, four numbers.** The top X finishers change by Y, the bottom Z by W, everyone else unchanged. Defaults **X = 3, Y = −1, Z = 3, W = +2**. | 3.7, 3.10, 5.9, 6.3 |
+| O-1 | Handicap adjustment amounts | **Configurable, four numbers.** The top X finishers change by Y, the bottom Z by W, everyone else unchanged. Defaults **X = 3, Y = −1, Z = 3, W = +2**. **Superseded by O-24** for every night after migration 0010; nights reviewed under it keep it. | 3.7, 3.10, 5.9, 6.3 |
 | O-2 | Data model detail | **Produce one.** Section 6: one entry per slot, a second entry row for a buy-back, and a match row only once both slots of a pair are filled. | 6 |
 | O-3 | Buy-back capacity | **Capped by the open slots, first come first served.** When the slots run out the loser is out, however willing they were. | 3.5, 5.1, 6.3 |
 | O-4 | Free passes | **One optional buy-back per player.** At close, **every** player left without an opponent goes to round two, so round one may produce several free passes. | 5.2, 5.3, 5.4, 6.3 |
@@ -1059,6 +1094,10 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 | O-21 | Privacy on the public site | **First name and surname initial, no photos.** The public page shows "Gabriel S.", a bracketed nickname standing in for the first name; names that would read the same grow to three surname letters, and a clash left after that is the organiser's to fix by editing a name (a warning on 3.2 names them). Photos stay on the organiser's screens; the public site shows initials on the player's colour. Built on the server, so nothing private leaves on a public route. | 2, 3.2, 3.8, 6.6, 7.2 |
 | O-22 | Two organisers on different phones or tabs | **Refuse the write that would overwrite an unseen change** (option B, a version check). Simple, and conflicts are rare: the admin bracket refreshes every 5 seconds. The refused screen shows the latest bracket and who changed it; the organiser taps again. A device's own quick taps are never refused. Player edits are checked the same way. | 2, 6.3, 7.3, 7.8 |
 | O-23 | A player's contact details | **Mobile number and email address, both optional.** The number may be an Australian mobile or landline; the email is checked for shape only. Organiser's screens only, like photos (O-21). | 3.2, 6.3, 7.3 |
+| O-24 | Handicap change after the night | **A fixed change per finishing position, replacing O-1's groups.** Reached the final **−3** (both finalists: the final is usually not played and does not count when it is), reached the semi-final and lost it **−2**, lost in round one, bought back and lost again in round one **+2** (a buy-back who then wins, or goes up on a free pass, is everyone else), everyone else **+1**. Four editable settings, locked once the night starts. A night ended early applies the same rule by round reached. The review groups players this way, says what happened to each and whether they bought back; the organiser still edits any number before saving. | 3.7, 3.10, 5.9, 6.3 |
+| O-25 | The master override's views | **Tree only.** The override drops its List view and List \| Tree switch; every action is reached from the tree and the sections under it. 3.4 and the public page keep their switch. | 3.9 |
+| O-26 | Changing a player's handicap during the night | **From the bracket, permanently, and the starts follow.** Each player on a match card has **Edit**, opening the full 3.2 edit sheet. A new rating is a permanent change with a history row naming the organiser; it recalculates the start of their not-started and in-play matches, while a finished match keeps what it was played on. The end-of-night change is proposed on top of it, and still needs the review saved. While a night is in progress the club list cannot change an entered player's rating and says to use the tree. | 3.2, 3.4, 3.7, 5.6, 5.9, 7.3 |
+| O-27 | Saving the end-of-night review more than once | **It cannot happen.** The night ends, the review proposes every change, the organiser fine-tunes and approves it once. After that a handicap is changed only by hand on the Players screen. A second save is refused and the review shows what was saved. | 3.7, 5.9, 6.3, 7.3 |
 
 ### 10.1 Still worth a word from the organiser
 
@@ -1066,8 +1105,6 @@ None of these block anything; each has a working answer that can be changed in o
 
 | Thing | What the app does now | Why it is flagged |
 | --- | --- | --- |
-| The default for **Z**, the size of the bottom group | 3, mirroring the top group | O-1 gave defaults for X, Y and W but not Z. |
-| **Ties inside a finishing group** — on a 16-player night, eight are knocked out in round one and "bottom 3" must choose between them | Broken by handicap (weakest first at the bottom, best first at the top), then by name; every value on 3.7 is editable before saving | This tie-break is the app's invention, not a rule. To adjust *everyone* knocked out in round one, set Z above the field size. |
 | The **rating range**, now that negatives are allowed | Stored and validated as −100 to 200; the review clamps to it | Nobody said where a handicap should stop. The club's numbers sit around 20–45. One line in the schema if you want it tighter. |
 | Whether the **master override** should need a second code | Any organiser code opens 3.9; every action is logged with their name | The override can undo a finished match, so a club with several organisers may want it narrower. |
 | Fees (§2) | Not recorded anywhere; the complete dialog shows the $2 amount as a reminder only | Nothing ever asked for fee tracking, so nothing was built. |
