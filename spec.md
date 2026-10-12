@@ -123,6 +123,8 @@ The app runs one snooker competition on one night. Before the night, the organis
 
 All screens are designed for a phone held upright. The club badge is the browser icon, sits above the title on 3.1 and 3.8, and at the left of the admin top bar.
 
+The admin top bar (O-31): **Tonight · Players · History**, then **More** holding Setup, Ratings, Settings, Override and **Help ↗**. On the narrowest phones the badge drops out so the four fit on one row.
+
 | # | Screen | Who | Route |
 | --- | --- | --- | --- |
 | 3.1 | Admin login | Organiser | `/admin/login` |
@@ -136,6 +138,7 @@ All screens are designed for a phone held upright. The club badge is the browser
 | 3.9 | Master override | Organiser | `/admin/override` |
 | 3.10 | Settings | Organiser | `/admin/settings` |
 | 3.11 | History | Organiser | `/admin/history` |
+| 3.12 | Organiser help | Organiser | `/admin/help`, own window |
 
 ### 3.1 Admin login
 
@@ -364,6 +367,12 @@ Every past night in one place, and how the handicaps have moved across them (§1
 **Handicap history**: a grid of every player who took part in a completed night against every completed night, oldest left, newest right, with the rating each player left the night with after the review, the change that produced it, and their rating today in the last column. A dash means they played and their number did not change; a blank means they did not play. Each date links to that night's comp history.
 
 **Actions:** none that change anything. Ratings are changed on 3.7 or 3.2. The screen reads the database directly and needs no API route.
+
+### 3.12 Organiser help
+
+A cheat sheet for the night, opened from **More › Help ↗** in its own window so the bracket stays where it was (O-31). Behind the admin login like every admin page, but without the top bar. Written for an older reader: large type, one short instruction per line, and a phone screenshot of each step with the button to tap ringed in orange.
+
+Seven tabs, by what the organiser is trying to do: **Start the night · Play a match · Record a result · Close entries · End of night · Fix a mistake · Players**. The screenshots (`public/help/`) show a sample night and are retaken whenever the screens they show change. Read-only; no API route.
 
 ## 4. Match and tournament state machine
 
@@ -1118,6 +1127,7 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 | O-28 | Reading the bracket (accessibility, Oct 2026) | **Larger type, full width, and a tree in two pages.** All type is 30% larger and the bracket screens use the full width of the screen. Three views everywhere the bracket shows: **Tree** (two pages, rounds 1–3 and round 2 to the final; round one in two columns, later boxes level with the middle of their feeders, drawn at the site's type size and centred; it moves to the second page by itself when buy-backs close, and the viewer can go back without a fetch), **Full tree** (every round at once, fitted to the width) and **List**. Start and Record result move to a block down the right of each tree box. The admin page opens on Tree everywhere; the public page on Tree on a wide screen and List on a phone; the choice is remembered on the device. The override and history have the two trees and no list (O-25). | 3.4, 3.8, 3.9, 3.11 |
 | O-29 | A night that reaches its final | **It is finished, not unfinished.** Once both semi-finals are decided the final is set, and ending the night there counts as a finished night: no "(unfinished)" tag, the two finalists named where the winner would be, and both labelled as reaching the final in the review. No winner is recorded. A night ended before the final is set stays "completed (unfinished)" (O-16). | 3.4, 3.8, 3.11, 5.9, 5.11 |
 | O-30 | A 32 bracket that drew too few players | **Convert to 16**, its own button beside Close entries, while entries are open and 16 or fewer slots are used (a buy-back counts twice). Pairs played or set keep both players, packed up from the top in their order; players with no opponent are paired at random in the boxes after them, an odd one waiting for the next arrival. Refused once a match beyond round one has started. Entries stay open; buy-backs and late arrivals are placed as usual (O-13). Not reversible. | 3.4, 5.15 |
+| O-31 | Top bar and help | **History in the top bar** beside Tonight and Players; **Help** last under More, opening a screenshot cheat sheet in its own window, behind the login, large type for older organisers. | 3, 3.12 |
 
 ### 10.1 Still worth a word from the organiser
 

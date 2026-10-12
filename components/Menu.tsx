@@ -21,9 +21,10 @@ export function Menu({ label, className, children }: { label: ReactNode; classNa
     <span ref={ref} className={`menu ${open ? "open" : ""} ${className ?? ""}`}>
       <button type="button" className="menu-trigger" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {label}
-        <span className="caret" aria-hidden>
-          ⌄
-        </span>
+        {/* A drawn chevron, not a font glyph: the same on every phone, and it turns over when open. */}
+        <svg className="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden>
+          <path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
       {open && (
         <span className="menu-list" role="menu" onClick={() => setOpen(false)}>

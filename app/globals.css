@@ -195,11 +195,15 @@ p {
   .topbar nav .nav-links a {
     white-space: nowrap;
   }
-  /* Tighter on a phone so Tonight, Players and More fit beside the initial at the larger type (O-28). */
+  /* Tighter on a phone so Tonight, Players, History and More fit beside the initial at the larger type (O-28). */
+  .topbar:not(.public) nav {
+    gap: 4px;
+  }
   .topbar:not(.public) nav .nav-links > a,
   .topbar:not(.public) nav .menu-trigger {
-    padding: 8px 6px;
-    font-size: 0.85rem;
+    padding: 8px 4px;
+    font-size: 0.8rem;
+    gap: 2px;
   }
   /* The admin bar hides the club name to make room for the pages; the public bar has no pages, so it keeps it. */
   .topbar:not(.public) .brand-name {
@@ -215,7 +219,30 @@ p {
     margin-left: auto;
   }
   /* The initial alone at the right; the name is under it. */
-  .topbar .who .who-name {
+  /* The scrolling nav would clip the More list, so on a phone it hangs from the bar itself, flush right. */
+  .topbar .inner {
+    position: relative;
+  }
+  .topbar nav .menu {
+    position: static;
+  }
+  .topbar nav .menu-list {
+    top: 100%;
+    left: auto;
+    right: 0;
+  }
+  .topbar .who .who-name,
+  .topbar .who .caret {
+    display: none;
+  }
+  .topbar .who > .menu-trigger {
+    padding: 4px;
+  }
+}
+
+/* The narrowest phones drop the admin badge (it only repeats Tonight) so all four pages still fit. */
+@media (max-width: 380px) {
+  .topbar:not(.public) .logo-link {
     display: none;
   }
 }
@@ -247,10 +274,12 @@ p {
 }
 
 .topbar .menu-trigger .caret {
-  font-size: 1rem;
-  line-height: 0;
-  position: relative;
-  top: -3px;
+  flex: none;
+  transition: transform 0.15s;
+}
+
+.topbar .menu.open > .menu-trigger .caret {
+  transform: rotate(180deg);
 }
 
 /* Drop-downs (components/Menu.tsx): More, and the name at the right. */
@@ -1906,4 +1935,135 @@ td.down {
 .photo-field .row {
   align-items: center;
   flex-wrap: wrap;
+}
+
+/* Organiser help (spec 3.12): big type for older readers, tabs as radio buttons styled here. */
+main.help {
+  max-width: 560px;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.help-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 16px;
+}
+
+.help-head h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.help input[name="help-tab"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.help-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.help-tabs label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 8px 10px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  color: var(--navy);
+  background: var(--card);
+  border: 2px solid var(--navy);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.help-panel {
+  display: none;
+}
+
+.help-panel h2 {
+  font-size: 1.25rem;
+  margin: 0 0 12px;
+}
+
+.help-panel ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: step;
+}
+
+.help-panel li {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 10px;
+  margin-bottom: 14px;
+}
+
+.help-panel li:not(.help-tip) {
+  counter-increment: step;
+}
+
+.help-panel li:not(.help-tip)::before {
+  content: counter(step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-weight: 700;
+}
+
+.help-panel li.help-tip {
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
+}
+
+.help-panel img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.help-panel p {
+  margin: 0 0 6px;
+  color: var(--fg);
+}
+
+#help-start:checked ~ .help-tabs label[for="help-start"],
+#help-play:checked ~ .help-tabs label[for="help-play"],
+#help-result:checked ~ .help-tabs label[for="help-result"],
+#help-close:checked ~ .help-tabs label[for="help-close"],
+#help-end:checked ~ .help-tabs label[for="help-end"],
+#help-fix:checked ~ .help-tabs label[for="help-fix"],
+#help-players:checked ~ .help-tabs label[for="help-players"] {
+  background: var(--navy);
+  color: #fff;
+}
+
+#help-start:checked ~ .help-panel-start,
+#help-play:checked ~ .help-panel-play,
+#help-result:checked ~ .help-panel-result,
+#help-close:checked ~ .help-panel-close,
+#help-end:checked ~ .help-panel-end,
+#help-fix:checked ~ .help-panel-fix,
+#help-players:checked ~ .help-panel-players {
+  display: block;
 }
