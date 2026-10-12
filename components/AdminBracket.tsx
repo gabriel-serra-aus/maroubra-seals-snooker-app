@@ -16,7 +16,7 @@ import { TablePicker, TableStrip, tableStates, type TableClaims } from "./Tables
 import { PlayerFinder } from "./Tonight";
 import { ViewToggle, type BracketViewMode } from "./ViewToggle";
 import { ApiError, get, patch, post } from "./client/api";
-import { roundName } from "./client/format";
+import { fmtRating, roundName } from "./client/format";
 import { useAction, useBracketScreen, usePoll, useServerClock, useStoredChoice } from "./client/hooks";
 import { playAlarm, unlockSound, useSound, useTimeoutAlert } from "./client/sound";
 
@@ -223,6 +223,30 @@ export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload;
       setData(r.bracket);
     }, "close");
 
+  // "Convert to 16" (O-30): a 32 bracket that drew few players becomes a 16 while entries stay open. The
+  // dry run names the new pairings before the organiser commits.
+  const convertTo16 = () =>
+    run(async () => {
+      type Reply = { kept: number; pairs: [string, string][]; waiting: string | null; open_slots: number };
+      const dry = await post<Reply>(`/api/admin/competitions/${compId}/convert-to-16`, { dry_run: true });
+      const points = [`${dry.kept} round-one match${dry.kept === 1 ? " keeps" : "es keep"} both players, played or not.`];
+      if (dry.pairs.length > 0) points.push(`New match${dry.pairs.length === 1 ? "" : "es"}: ${dry.pairs.map(([a, b]) => `${a} v ${b}`).join(", ")}.`);
+      if (dry.waiting) points.push(`${dry.waiting} waits for the next buy-back or late entry.`);
+      points.push(`Open slots after: ${dry.open_slots}.`);
+      const ok = await ask({
+        title: "Convert to a 16 bracket?",
+        body: "Players with no opponent are paired with each other. Entries stay open.",
+        points,
+        note: "This cannot be undone: the override can grow back to 32, but not to these pairings.",
+        confirm: "Convert to 16",
+        cancel: "Keep 32",
+      });
+      if (!ok) return;
+      const r = await post<Reply & WithBracket>(`/api/admin/competitions/${compId}/convert-to-16`);
+      setNotice(`Now a 16 bracket. ${r.pairs.length} new match${r.pairs.length === 1 ? "" : "es"}, ${r.open_slots} open slot${r.open_slots === 1 ? "" : "s"}.`);
+      setData(r.bracket);
+    }, "convert");
+
   const forcePair = () =>
     run(async () => {
       const r = await post<{ match_number: number } & WithBracket>(`/api/admin/competitions/${compId}/force-pair`);
@@ -367,6 +391,12 @@ export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload;
               Close entries
             </Btn>
           )}
+          {c.status === "in_progress" && c.buybacks_open && c.bracket_size === 32 && c.bracket_size - c.open_slots <= 16 && (
+            // Convert to 16 (O-30): only while entries are open and 16 or fewer slots are used.
+            <Btn disabled={busy} pending={isPending("convert")} title="Make this a 16 bracket" onClick={convertTo16}>
+              Convert to 16
+            </Btn>
+          )}
           {roundOneOpen && c.buybacks_open && (
             // Force Pair (spec 5.5): two waiting players into a match.
             <Btn disabled={busy || waitingCount < 2} pending={isPending("force")} title={waitingCount < 2 ? "Needs 2 waiting players" : "Force Pair two waiting players"} onClick={forcePair}>
@@ -478,6 +508,7 @@ export function AdminBracket({ initial, signedInAs }: { initial: BracketPayload;
 function AddLateArrivalSheet({ b, onClose, onSaved }: { b: BracketPayload; onClose: () => void; onSaved: (msg: string | null, bracket: BracketPayload) => void }) {
   const [players, setPlayers] = useState<ClubPlayer[] | null>(null);
   const [playerId, setPlayerId] = useState("");
+  const [q, setQ] = useState("");
   // One tick decides the form: a club player off the list, or a brand-new player typed in. Only the
   // fields for the chosen one are shown, so there is nothing to get wrong on a phone at the table.
   const [isNew, setIsNew] = useState(false);
@@ -488,7 +519,9 @@ function AddLateArrivalSheet({ b, onClose, onSaved }: { b: BracketPayload; onClo
     void get<{ players: ClubPlayer[] }>("/api/admin/players").then((r) => setPlayers(r.players));
   }, []);
   const tonight = new Set(b.entries.map((e) => e.player_id));
-  const choices = (players ?? []).filter((p) => p.active && !tonight.has(p.id));
+  // Search by name, as on Setup (3.3); the chosen player stays listed while the search changes.
+  const needle = q.trim().toLowerCase();
+  const choices = (players ?? []).filter((p) => p.active && !tonight.has(p.id) && (!needle || p.id === playerId || p.name.toLowerCase().includes(needle)));
   const save = () =>
     run(async () => {
       if (isNew && (!newName.trim() || newRating.trim() === "" || !Number.isInteger(Number(newRating)))) {
@@ -537,20 +570,29 @@ function AddLateArrivalSheet({ b, onClose, onSaved }: { b: BracketPayload; onClo
             <p className="muted small">They are added to the club player list as well, so they are on it next week.</p>
           </>
         ) : (
-          <label className="field">
+          <div className="field">
             <span>Club player</span>
-            <span className="select-wrap" style={{ display: "block" }}>
-              <select value={playerId} disabled={busy || players === null} onChange={(e) => setPlayerId(e.target.value)}>
-                <option value="">{players === null ? "Loading players…" : "— choose —"}</option>
-                {choices.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.rating})
-                  </option>
-                ))}
-              </select>
-              {players === null && <Spinner />}
-            </span>
-          </label>
+            <input type="search" placeholder="Find a player…" value={q} autoFocus disabled={busy} onChange={(e) => setQ(e.target.value)} />
+            <ul className="pick-list" aria-label="Club players" style={{ maxHeight: "40vh" }}>
+              {players === null ? (
+                <li className="empty">
+                  <Spinner /> Loading players…
+                </li>
+              ) : choices.length === 0 ? (
+                <li className="empty">{needle ? "No one matches." : "Everyone is in."}</li>
+              ) : (
+                choices.map((p) => (
+                  <li key={p.id} className={p.id === playerId ? "on" : ""}>
+                    <label>
+                      <input type="radio" name="late-player" checked={p.id === playerId} disabled={busy} onChange={() => setPlayerId(p.id)} />
+                      {p.name}
+                      <span className="rating">{fmtRating(p.rating)}</span>
+                    </label>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
         )}
         {error && <div className="error">{error}</div>}
         <div className="row">

@@ -7,12 +7,14 @@ import {
   buybackEntryOf,
   buybacksOpen,
   firstEntryOf,
+  matchLabel,
   openSlots,
   pickFreeSlot,
   playerRating,
   positionOf,
 } from "./derive";
-import { placeInSlot } from "./matches";
+import { createMatch, placeInSlot } from "./matches";
+import { shuffle } from "./random";
 import { advanceAll } from "./rounds";
 import type { Ctx, EntryRow, FreePassRow, MatchRow, Snapshot } from "./types";
 
@@ -145,4 +147,70 @@ export function closeBuybacks(s: Snapshot, ctx: Ctx): CloseResult {
     matchesCreated: adv.matches,
     allPasses: adv.freePasses,
   };
+}
+
+export interface ConvertResult {
+  /** Round-one matches kept with both players, by their new number (M1, M2, …). */
+  kept: number;
+  /** New round-one matches between players who had no opponent. */
+  paired: MatchRow[];
+  /** The one player left alone when the lone players were an odd number; waits for the next arrival. */
+  waiting: string | null;
+  openSlots: number;
+}
+
+/**
+ * "Convert to 16" (O-30): a 32 bracket that drew too few players becomes a 16, while entries are still
+ * open. Needs 16 or fewer entries (slots used, a buy-back counting twice) and no match beyond round one
+ * started. Every round-one pair keeps both players and its match, played or not, packed up from the top
+ * in the order it had; the players with no opponent are then paired at random in the boxes after them,
+ * an odd one left waiting alone. Later rounds are rebuilt by the advancement step on the new tree. The
+ * window stays open: Close entries is its own tap. One way only — the override can grow back to 32, but
+ * not to the old pairings.
+ */
+export function convertTo16(s: Snapshot, ctx: Ctx): ConvertResult {
+  const c = s.competition;
+  if (c.status !== "in_progress") throw conflict("The competition is not running");
+  if (c.bracket_size !== 32) throw conflict("The bracket is already 16");
+  if (!buybacksOpen(s)) throw conflict("Entries are closed");
+  if (s.entries.length > 16) throw conflict(`${s.entries.length} slots are used: a 16 bracket holds 16`);
+  const started = s.matches.find((m) => m.round > 1 && m.state !== "not_started");
+  if (started) throw conflict(`${matchLabel(s, started)} has started — a 16 bracket would change who meets whom`);
+  if (s.freePasses.length > 0) throw conflict("A free pass has been granted");
+
+  // Later rounds go; advanceAll rebuilds them on the 16 tree.
+  s.matches = s.matches.filter((m) => m.round === 1);
+  const kept: [EntryRow, EntryRow, MatchRow | undefined][] = [];
+  const lone: EntryRow[] = [];
+  for (let k = 1; k <= 16; k++) {
+    const a = s.entries.find((e) => e.slot === 2 * k - 1);
+    const b = s.entries.find((e) => e.slot === 2 * k);
+    if (a && b) kept.push([a, b, s.matches.find((m) => m.number === k)]);
+    else if (a || b) lone.push((a ?? b)!);
+  }
+  let box = 0;
+  for (const [a, b, m] of kept) {
+    box++;
+    a.slot = 2 * box - 1;
+    b.slot = 2 * box;
+    if (m) m.number = box;
+  }
+  c.bracket_size = 16;
+  const order = shuffle(lone, ctx.rng);
+  const paired: MatchRow[] = [];
+  for (let i = 0; i + 1 < order.length; i += 2) {
+    box++;
+    order[i].slot = 2 * box - 1;
+    order[i + 1].slot = 2 * box;
+    paired.push(createMatch(s, ctx, order[i].id, order[i + 1].id, 1, box, "placement"));
+  }
+  let waiting: string | null = null;
+  if (order.length % 2 === 1) {
+    const last = order[order.length - 1];
+    last.slot = 2 * box + 1;
+    waiting = last.id;
+  }
+  advanceAll(s, ctx);
+  ctx.log.push({ action: "convert_to_16", details: { kept: kept.length, paired: paired.length, waiting } });
+  return { kept: kept.length, paired, waiting, openSlots: openSlots(s) };
 }

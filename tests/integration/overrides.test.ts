@@ -262,6 +262,26 @@ describe("master override routes (spec 7.6) with dry runs", () => {
     expect((await api.abandon(next.body.competition.id)).status).toBe(200);
   });
 
+  it("Convert to 16: the dry run writes nothing; the real one pairs the lone players, keeps entries open and is logged (O-30)", async () => {
+    const players = await club(11, "Small");
+    const { id } = await night(players, { bracket_size: 32 });
+    const dry = await api.convertTo16(id, { dry_run: true });
+    expect(dry.status).toBe(200);
+    expect(dry.body.kept).toBe(5);
+    expect(dry.body.waiting).not.toBeNull();
+    expect((await api.bracket(id)).body.competition?.bracket_size).toBe(32);
+    const r = await api.convertTo16(id);
+    expect(r.status).toBe(200);
+    expect(r.body.open_slots).toBe(5);
+    const c = r.body.bracket.competition!;
+    expect(c.bracket_size).toBe(16);
+    expect(c.buybacks_open).toBe(true);
+    expect(find.matchesInRound(r.body.bracket, 1)).toHaveLength(5);
+    expect((await api.convertTo16(id)).status).toBe(409);
+    expect((await api.adminActions(id)).body.actions.map((a) => a.action)).toContain("convert_to_16");
+    expect((await api.abandon(id)).status).toBe(200);
+  });
+
   it("abandon frees the live slot; the public page hides the abandoned night", async () => {
     // Abandon a fresh setup so the completed nights stay on the public page.
     const c0 = await api.createCompetition();

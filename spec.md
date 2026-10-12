@@ -253,8 +253,9 @@ Rounds overlap: R2M1 can be in play while R1M7 has not started, so the list show
 | **Review result** | Match finished, winner's next match not started | Opens 3.5 to change the result; the corrected winner is pulled back out of the next round (§12). Otherwise replaced by "Result locked: next match started" — the override (3.9) is the way through. |
 | **Force Pair** | Buy-backs open, ≥2 waiting in round one | Pairs two waiting players at random, whichever way they entered (§10). Under two waiting it is disabled with "Needs 2 waiting players". Never touches an existing match. Hidden once buy-backs close. |
 | **No More Buy-Backs / Late Entries** | Buy-backs open | Confirms, naming the consequence: "…2 players have no opponent and will go straight to round 2." Locks the player list and gives a free pass to **every** round-one player still without an opponent (O-4); the tree then moves on (5.3, 5.4). **The only way the window closes** (O-15): once every round-one match is finished a notice says so, names anyone waiting alone, and the button turns primary. |
+| **Convert to 16** | Buy-backs open, a 32 bracket, 16 or fewer slots used | Makes the night a 16 bracket (5.15, O-30). Confirms on the centred card from a `dry_run`: the matches kept, the new pairings, who is left waiting and the open slots after. Entries stay open. Cannot be undone. |
 | **Tree \| Full tree \| List** | Always | Switches views (O-28); the choice is remembered on that device. The Tree's page switch is not remembered: it follows the buy-back window. |
-| **Add late arrival** | Buy-backs open, ≥1 open slot | A **New player — not on the club list** tick chooses the form: unticked shows only the club list, ticked shows only Name and Rating (and adds them to the club list for next week). The player must be active and **not in tonight's competition**, and enters as a **late arrival** (§3, §8.3) — a `late` entry, tagged "late arrival", not a buy-back. Takes one open slot, placed per 5.2; the reply says "Placed into R1M8, awaiting an opponent" or "Placed into R1M7 v Gus Ray". If they lose in round one they are offered the buy-back like anyone else. A round-one loser is refused here (409, naming the fix): they buy back through **Review result**. |
+| **Add late arrival** | Buy-backs open, ≥1 open slot | A **New player — not on the club list** tick chooses the form: unticked shows only the club list, with a **Find a player** search box above it as on 3.3, ticked shows only Name and Rating (and adds them to the club list for next week). The player must be active and **not in tonight's competition**, and enters as a **late arrival** (§3, §8.3) — a `late` entry, tagged "late arrival", not a buy-back. Takes one open slot, placed per 5.2; the reply says "Placed into R1M8, awaiting an opponent" or "Placed into R1M7 v Gus Ray". If they lose in round one they are offered the buy-back like anyone else. A round-one loser is refused here (409, naming the fix): they buy back through **Review result**. |
 | **End night here ›** | In progress | The night has run out of time (O-16). Confirms with what the tap costs, from a `dry_run`: matches left unplayed, clocks discarded, who is still in. Closes the night as `complete` with **no winner** (5.11); the header reads "Complete (unfinished)" and the rating review link is the same one a finished night gets. Cannot be undone. |
 | **Abandon night** | In progress | Confirms, then sets the competition to `abandoned` (O-7) and returns to setup. Everything played is kept but counts for nothing. |
 | **Master override ›** | Any time | Opens 3.9. |
@@ -429,7 +430,7 @@ A result still cannot be entered on a `not_started` match (§12), and the server
 
 Reversal rules:
 
-- **Bracket size** cannot be reduced, and cannot change at all on the normal screens after Start (§8.1). The override can grow 16 → 32, which only adds open slots.
+- **Bracket size** cannot change on the normal screens after Start (§8.1), with one exception: **Convert to 16** shrinks a 32 while entries are open and 16 or fewer slots are used (5.15, O-30). The override can grow 16 → 32, which only adds open slots.
 - **A mistaken Start is reversible** with Cancel start (O-5); there is no data to lose.
 - **Ending the night on time is not reversible** (O-16), and neither is Abandon (O-7). They are the two one-way doors.
 - **A mistaken draw** is handled by Abandon and setting up again, or by rebuilding pairings on 3.9.
@@ -738,6 +739,7 @@ The minimum unit tests over `lib/`:
 - No automatic close: the window outlives the last round-one result and a late arrival still gets in until the tap (5.3, O-15); abandon freeing the live slot (5.11).
 - End night here (O-16, 5.11): the night becomes complete with a null winner and every finished match kept, a match in play has its clock thrown away, the players left standing are named, a second tap is refused, the `dry_run` writes nothing, and the rating review still opens — labelling the furthest round reached `R2`, not "final".
 - End night here with the final set and unplayed (O-29, 5.11): the night is finished, not "unfinished" — the payload names both finalists, history carries them, and the review labels both "final".
+- Convert to 16 (O-30, 5.15): 9 of 32 with a buy-back and a late arrival keeps M1–M4 with their players, states and winners, pairs two of the three lone players in M5 and leaves one waiting in slot 11, rebuilds the round-two match as M9, keeps entries open, and Close then gives the waiting player a free pass; an even number of lone players leaves nobody waiting; refused with 17 slots used, on a 16, with a round-two match started, and once closed; the `dry_run` writes nothing.
 - Tables (5.14): Start without a table is refused naming the free ones, a busy or out-of-range table is refused, a finished match frees its table but keeps the number, Cancel start clears it, a table noted before start counts as the choice only while free, every table busy refuses the start, moving in play needs a free table, and the count cannot drop below a table in play.
 
 ### 5.14 Tables
@@ -750,6 +752,19 @@ The club plays on a few numbered snooker tables — **four** unless a night's se
 - **Table count** can change any time before the night is complete, but not below a table a match is currently playing on (`409`).
 
 Nothing about tables changes who plays whom or who advances; it exists so a player can walk to the right table and the organiser can see what is free.
+
+### 5.15 Convert to 16 (O-30)
+
+**Trigger.** The organiser taps **Convert to 16** on 3.4. Allowed while the night is `in_progress`, buy-backs are open, the bracket is 32, entries number **16 or fewer** (slots used, so a player who bought back counts twice), no match beyond round one has started and no free pass has been granted. Otherwise `409` naming the reason.
+
+**Effect, in one transaction:**
+
+1. Every match beyond round one is deleted; none has started.
+2. Each round-one box holding two entries (its match played, in play or not started) keeps both, packed up from the top in its old order: slots 1–2, 3–4 and so on, its match renumbered to suit.
+3. The entries alone in their box are shuffled and paired into the boxes after them, each pair a new round-one match; an odd one out sits alone in the next box and waits like any lone player.
+4. `bracket_size` becomes 16 and the advancement step (5.4) rebuilds the later rounds on the new tree.
+
+Entries stay open: **Close entries** is a separate tap, and later buy-backs and late arrivals take the open slots by the placement rule (5.2, O-13). Who meets whom from round two may change, which is why a started round-two match blocks it. It cannot be undone — the override can grow back to 32 (5.10), but not to the old pairings.
 
 ## 6. Data model
 
@@ -920,7 +935,7 @@ Unique `(competition_id, entry_id, from_round)`. There is deliberately **no** un
 | id | bigint | PK, identity |
 | competition_id | uuid | FK → competitions, nullable |
 | actor | text | not null — the signed-in organiser's name (O-8) |
-| action | text | not null, e.g. `cancel_start`, `reset_match`, `remove_player`, `reopen_buybacks`, `grow_bracket`, `end_early`, `abandon` |
+| action | text | not null, e.g. `cancel_start`, `reset_match`, `remove_player`, `reopen_buybacks`, `grow_bracket`, `convert_to_16`, `end_early`, `abandon` |
 | details | jsonb | not null — what changed, enough to explain the action a week later |
 | created_at | timestamptz | not null, default now() |
 
@@ -1005,6 +1020,7 @@ All require the cookie.
 | `POST /api/admin/competitions/{id}/start` | — | `setup`; `2 ≤ entries ≤ bracket_size`. Runs 5.1 in a transaction. |
 | `POST /api/admin/competitions/{id}/force-pair` | — | Buy-backs open; ≥ 2 waiting; else `409`. Runs 5.5. |
 | `POST /api/admin/competitions/{id}/close-buybacks` | `{ dry_run? }` | Buy-backs open; else `409`. Runs 5.3. Reports how many free passes were granted and to whom, and which matches the cascade created; `dry_run` returns the same without writing, which is what the 3.4 confirmation uses. |
+| `POST /api/admin/competitions/{id}/convert-to-16` | `{ dry_run? }` | `in_progress`, buy-backs open, `bracket_size` 32, 16 or fewer entries, no match beyond round one started and no free pass; else `409` naming the reason. Runs 5.15 (O-30). Returns `kept`, `pairs` (names), `waiting` and `open_slots`; `dry_run` returns the same without writing, for the 3.4 confirmation. Writes an `admin_actions` row. |
 | `POST /api/admin/competitions/{id}/end` | `{ dry_run? }` | `in_progress`; else `409`. Runs End night here (5.11, O-16): `complete` with no winner. Returns `unplayed`, `clocks_cancelled` and `still_in`. Writes an `admin_actions` row. |
 | `POST /api/admin/competitions/{id}/abandon` | — | `setup` or `in_progress`; else `409`. Runs 5.11, writes an `admin_actions` row (O-7). |
 | `GET /api/admin/bracket` | — | Same payload as the public bracket, uncached. |
@@ -1101,6 +1117,7 @@ Nothing here was implemented by guessing. Each row is the organiser's ruling and
 | O-27 | Saving the end-of-night review more than once | **It cannot happen.** The night ends, the review proposes every change, the organiser fine-tunes and approves it once. After that a handicap is changed only by hand on the Players screen. A second save is refused and the review shows what was saved. | 3.7, 5.9, 6.3, 7.3 |
 | O-28 | Reading the bracket (accessibility, Oct 2026) | **Larger type, full width, and a tree in two pages.** All type is 30% larger and the bracket screens use the full width of the screen. Three views everywhere the bracket shows: **Tree** (two pages, rounds 1–3 and round 2 to the final; round one in two columns, later boxes level with the middle of their feeders, drawn at the site's type size and centred; it moves to the second page by itself when buy-backs close, and the viewer can go back without a fetch), **Full tree** (every round at once, fitted to the width) and **List**. Start and Record result move to a block down the right of each tree box. The admin page opens on Tree everywhere; the public page on Tree on a wide screen and List on a phone; the choice is remembered on the device. The override and history have the two trees and no list (O-25). | 3.4, 3.8, 3.9, 3.11 |
 | O-29 | A night that reaches its final | **It is finished, not unfinished.** Once both semi-finals are decided the final is set, and ending the night there counts as a finished night: no "(unfinished)" tag, the two finalists named where the winner would be, and both labelled as reaching the final in the review. No winner is recorded. A night ended before the final is set stays "completed (unfinished)" (O-16). | 3.4, 3.8, 3.11, 5.9, 5.11 |
+| O-30 | A 32 bracket that drew too few players | **Convert to 16**, its own button beside Close entries, while entries are open and 16 or fewer slots are used (a buy-back counts twice). Pairs played or set keep both players, packed up from the top in their order; players with no opponent are paired at random in the boxes after them, an odd one waiting for the next arrival. Refused once a match beyond round one has started. Entries stay open; buy-backs and late arrivals are placed as usual (O-13). Not reversible. | 3.4, 5.15 |
 
 ### 10.1 Still worth a word from the organiser
 

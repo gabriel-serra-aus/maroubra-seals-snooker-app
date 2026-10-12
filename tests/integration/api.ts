@@ -17,6 +17,7 @@ import * as forcePair from "@/app/api/admin/competitions/[id]/force-pair/route";
 import * as closeBuybacks from "@/app/api/admin/competitions/[id]/close-buybacks/route";
 import * as abandon from "@/app/api/admin/competitions/[id]/abandon/route";
 import * as endNight from "@/app/api/admin/competitions/[id]/end/route";
+import * as convertTo16 from "@/app/api/admin/competitions/[id]/convert-to-16/route";
 import * as ratingReview from "@/app/api/admin/competitions/[id]/rating-review/route";
 import * as adminActions from "@/app/api/admin/competitions/[id]/admin-actions/route";
 import * as nightPlayer from "@/app/api/admin/competitions/[id]/players/[playerId]/route";
@@ -117,6 +118,8 @@ export const api = {
   forcePair: (id: string) => call<{ match_number: number; bracket: BracketPayload }>(forcePair.POST, "POST", `/api/admin/competitions/${id}/force-pair`, { params: { id } }),
   closeBuybacks: (id: string) => call<{ free_passes: number; free_pass_names: string[]; matches_created: number[]; completed: boolean; bracket: BracketPayload }>(closeBuybacks.POST, "POST", `/api/admin/competitions/${id}/close-buybacks`, { params: { id } }),
   abandon: (id: string) => call(abandon.POST, "POST", `/api/admin/competitions/${id}/abandon`, { params: { id } }),
+  convertTo16: (id: string, body: unknown = {}) =>
+    call<{ kept: number; pairs: [string, string][]; waiting: string | null; open_slots: number; bracket: BracketPayload }>(convertTo16.POST, "POST", `/api/admin/competitions/${id}/convert-to-16`, { body, params: { id } }),
   endNight: (id: string, body: unknown = {}) =>
     call<{ unplayed: number; clocks_cancelled: number; still_in: string[]; bracket?: BracketPayload }>(endNight.POST, "POST", `/api/admin/competitions/${id}/end`, { body, params: { id } }),
   ratingReview: (id: string) => call<{ rows: Array<{ player_id: string; name: string; current_rating: number; proposed_rating: number; delta: number; group: string; finish: string; story: string; bought_back: boolean; tonight_change: { from: number; to: number } | null; saved_change: { from: number; to: number } | null }>; competition: { rating_review_saved_at: string | null; rating_review_saved_by: string | null } }>(ratingReview.GET, "GET", `/api/admin/competitions/${id}/rating-review`, { params: { id } }),
